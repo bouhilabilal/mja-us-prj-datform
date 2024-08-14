@@ -1,0 +1,182 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CUSTOMER_MERGE",
+    tags: ["dimensions", "CUSTOMERS","MISSING"]
+}
+
+js {
+    const {
+        recent,
+        ancient
+    } = require("includes/merging_functions/merge_on_time.js");
+  
+  const customers_typer_table = dataform.projectConfig.vars.customers_typer ;
+
+}
+-- WITH RankedResults AS (
+--   SELECT
+--     *,type_cust.Customer_Type as type_custCustomer_Type,
+--     ROW_NUMBER() OVER(PARTITION BY temp_id, pos_id, ecom_id ORDER BY last_update_date DESC) AS row_num
+--   FROM
+--   -- ${ref("WRK_CREATE_TEMP_ID")}
+--    ${ref("FIX_MISSING_IDS")}
+
+--   LEFT JOIN
+--       ${customers_typer_table} type_cust
+--   ON type_cust.Customer_ID = pos_id OR type_cust.Customer_ID = ecom_id
+-- )
+WITH RankedResults AS (
+    SELECT
+    * from 
+        
+        ${ref("WRK_CUSTOMER_BEFORE_MERGE")})
+, FilteredRanked AS (
+  SELECT
+    *,
+    RANK() OVER(PARTITION BY temp_id ORDER BY last_update_date DESC) AS rank
+
+  FROM
+    RankedResults
+  WHERE
+    row_num = 1
+    )  
+, source_ids as (
+ SELECT
+  temp_id,
+  ARRAY_AGG(DISTINCT pos_id IGNORE NULLS) AS pos_id,
+  ARRAY_AGG(DISTINCT ecom_id IGNORE NULLS) AS ecom_id, 
+  FROM
+  FilteredRanked
+GROUP BY
+  temp_id
+) 
+,merge_rows as (
+SELECT
+  temp_id,
+  COALESCE(MAX(pos_created_by_id), '') as pos_created_by_id,
+  COALESCE(MAX(ecom_created_by_id), '') as ecom_created_by_id,
+  COALESCE(MAX(Sources_Account_id), '') as Sources_Account_id,
+  last_name,
+  COALESCE(MAX(middle_name), '') as middle_name,
+  first_name,
+  email,
+  phone,
+  COALESCE(MAX(Sources_Source_Id), '') as Sources_Source_Id,
+  COALESCE(MAX(Sources_Source_Customer_Id), '') as Sources_Source_Customer_Id,
+  MAX(Email_main_email)as Email_main_email,
+  COALESCE(MAX(Email_source_id),null) as Email_source_id,
+  MAX(phone_main_phone) as phone_main_phone,
+  COALESCE(MAX(Phone_source_id), null) as Phone_source_id,
+  COALESCE(MAX(Phone_home_phone), null) as Phone_home_phone,
+  COALESCE(MAX(Phone_office_phone), null) as Phone_office_phone,
+  MAX(fictitious_customer)fictitious_customer,
+  MAX(type_custCustomer_Type) as type_custCustomer_Type,
+  COALESCE(MAX(Prefered_Postal_Address_Address), null) as Prefered_Postal_Address_Address,
+  COALESCE(MAX(Prefered_Postal_Address_ZipCode), null) as Prefered_Postal_Address_ZipCode,
+  COALESCE(MAX(Prefered_Postal_Address_City), null) as Prefered_Postal_Address_City,
+  COALESCE(MAX(Prefered_Postal_Address_State), null) as Prefered_Postal_Address_State,
+  COALESCE(MAX(Prefered_Postal_Address_CountryId), null) as Prefered_Postal_Address_CountryId,
+  COALESCE(MAX(Prefered_Postal_Address_CountryName), null) as Prefered_Postal_Address_CountryName,
+  COALESCE(MAX(LANGUAGE), '') as LANGUAGE,
+  COALESCE(MAX(Nationality), '') as Nationality,
+  COALESCE(MAX(birthdate), NULL) as birthdate,
+  COALESCE(MAX(Salutation), '') as Salutation,
+  COALESCE(MAX(Salutation_Gender), '') as Salutation_Gender,
+  COALESCE(MAX(Account_Creation_Date), NULL) as Account_Creation_Date,
+  COALESCE(MAX(Last_Activity_Date), NULL) as Last_Activity_Date,
+  COALESCE(MAX(Last_Viewed_Date), NULL) as Last_Viewed_Date,
+  COALESCE(MAX(Last_Modified_Date), NULL) as Last_Modified_Date,
+  COALESCE(MAX(consent_homephone_code), '') as consent_homephone_code,
+  COALESCE(MAX(consent_officephone_code), '') as consent_officephone_code,
+  COALESCE(MAX(consent_cellphone_code), '') as consent_cellphone_code,
+  COALESCE(MAX(consent_email1_code), '') as consent_email1_code,
+  COALESCE(MAX(consent_email2_code), '') as consent_email2_code,
+  -- MAX(Contactability_Email)as Contactability_Email,
+  -- MAX(Contactability_Phone) as Contactability_Phone,
+  -- MAX(Contactability_Print) as Contactability_Print,
+  COALESCE(MAX(Date_Of_Acceptance), NULL) as Date_Of_Acceptance,
+  COALESCE(MAX(Date_Of_Opt_In_Update), NULL) as Date_Of_Opt_In_Update,
+  COALESCE(MAX(Privacy_Policy_Signed), null) as Privacy_Policy_Signed,
+  COALESCE(MAX(Privacy_Policy_Acceptance), null) as Privacy_Policy_Acceptance,
+  COALESCE(MAX(Sales_Associate), '') as Sales_Associate,
+  COALESCE(MAX(Master_Record_Id), '') as Master_Record_Id,
+  COALESCE(MAX(last_update_date), NULL) as last_update_date,
+  tech_golden_id
+FROM
+  FilteredRanked 
+  where rank = 1
+ GROUP BY
+temp_id,
+  last_name,
+  first_name,
+  email,
+  phone,
+  tech_golden_id
+) 
+
+select si.*, 
+pos_created_by_id,
+ecom_created_by_id,
+Sources_Account_id,
+last_name,
+middle_name,
+first_name,
+email,
+phone,
+Sources_Source_Id,
+Sources_Source_Customer_Id,
+Email_main_email,
+Email_source_id,
+phone_main_phone,
+Phone_source_id,
+Phone_home_phone,
+Phone_office_phone,
+fictitious_customer,
+CASE
+    WHEN type_custCustomer_Type is not null then type_custCustomer_Type
+    WHEN email LIKE '%@marcjacobs.com%' THEN 'Employee'
+    
+  ELSE
+  'Real'
+  END
+    AS Customer_Type,
+Prefered_Postal_Address_Address,
+Prefered_Postal_Address_ZipCode,
+Prefered_Postal_Address_City,
+Prefered_Postal_Address_State,
+Prefered_Postal_Address_CountryId,
+Prefered_Postal_Address_CountryName,
+LANGUAGE,
+Nationality,
+birthdate,
+Salutation,
+Salutation_Gender,
+Account_Creation_Date,
+Last_Activity_Date,
+Last_Viewed_Date,
+Last_Modified_Date,
+consent_homephone_code,
+consent_officephone_code,
+consent_cellphone_code,
+consent_email1_code,
+consent_email2_code,
+Date_Of_Acceptance,
+Date_Of_Opt_In_Update,
+Privacy_Policy_Signed,
+Privacy_Policy_Acceptance,
+Sales_Associate,
+Master_Record_Id,
+last_update_date,
+tech_golden_id
+  from merge_rows mr
+  inner join source_ids si
+  on si.temp_id = mr.temp_id
+
+order by 
+  temp_id,
+  mr.last_name,
+  mr.first_name,
+  mr.email,
+  mr.phone,
+  mr.tech_golden_id

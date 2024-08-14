@@ -1,0 +1,77 @@
+config {
+  type: "incremental",
+  schema: "datalake",
+  name: "DL_PRODUCTS",
+  tags: ["datalake", "PRODUCTS"],
+
+
+}
+
+js {
+  // Environment prefix logic remains unchanged
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+
+incremental_where {
+  PARSE_DATE('%Y%m%d', Created_Date) > (SELECT MAX(PARSE_DATE('%Y%m%d', Created_Date)) FROM ${self()}) OR
+  PARSE_DATE('%Y%m%d', Modified_Date) > (SELECT MAX(PARSE_DATE('%Y%m%d', Modified_Date)) FROM ${self()}) 
+
+}
+
+SELECT 
+  Product_ID,
+  Style,
+  SKU,
+  Barcode___UPC,
+  SID,
+  External_ID,
+  Product_Name,
+  Brand,
+  Design_Season_Code,
+  Design_Season,
+  Season,
+  In_Store_Month,
+  Season_Year,
+  Variant_status,
+  Created_Date,
+  Modified_Date,
+  Division_Code,
+  Division,
+  Category_Code,
+  Category,
+  Class_Code,
+  Class,
+  Subclass_Code,
+  Subclass,
+  MJ_Division_Code,
+  MJ_Division,
+  Merch_Collection,
+  Merch_Theme,
+  Group_Code,
+  `Group`,
+  Line_Code,
+  Line,
+  Department_Code,
+
+  Department,
+  Subdepartment_Code,
+  Subdepartment,
+  Report_Category,
+  Report_Category_Detail,
+  Color_Code,
+  Color,
+  Size,
+  Size_rank,
+  Composition_Code,
+  Composition,
+  Gender,
+  MJ_Product_Life_Cycle,
+  Product_Life_Cycle_Type,
+  Country_of_origin_Iso3,
+  Country_of_origin_Iso2,
+  Country_of_origin,
+  MJ_Core_Assortment
+FROM 
+  mja_us_bqd_dpf_ax_01_${env_prefix}.AX_PRODUCTS

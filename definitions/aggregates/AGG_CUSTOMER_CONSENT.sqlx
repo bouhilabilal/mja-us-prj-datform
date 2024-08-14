@@ -1,0 +1,88 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMER_CONSENT",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+
+SELECT
+  Customer_Id ,
+  Sources,
+  Last_Name,
+  First_Name,
+  Middle_Name,
+  Email,
+  Phone,
+  fictitious_customer,
+  Prefered_Postal_Address,
+  LANGUAGE,
+  Nationality,
+  Birthdate,
+  Age,
+  CASE
+    WHEN Age is null THEN null
+    WHEN Age BETWEEN 0 AND 20 THEN '0-20'
+    WHEN Age BETWEEN 21 AND 40 THEN '20-40'
+    WHEN Age BETWEEN 41 AND 60 THEN '40-60'
+    ELSE '60+'
+  END AS Age_Range,
+  Salutation,
+  Salutation_Gender,
+  Account_Creation_Date,
+  Last_Activity_Date,
+  Last_Modified_Date,
+  Last_Viewed_Date,
+  Customer_Type,
+  consent_homephone_code,
+  CASE consent_homephone_code
+    WHEN 'PAR' THEN 'Information usable by the brand name or partner'
+    WHEN 'ENS' THEN 'Information usable only by the brand name'
+    WHEN 'REF' THEN 'Do not use this Information'
+    WHEN 'DEM' THEN 'Information not requested from customer'
+    END
+  AS consent_homephone,
+  consent_officephone_code,
+  CASE consent_officephone_code
+    WHEN 'PAR' THEN 'Information usable by the brand name or partner'
+    WHEN 'ENS' THEN 'Information usable only by the brand name'
+    WHEN 'REF' THEN 'Do not use this Information'
+    WHEN 'DEM' THEN 'Information not requested from customer'
+    END
+  AS consent_officephone,
+  consent_cellphone_code,
+  CASE consent_cellphone_code
+    WHEN 'PAR' THEN 'Information usable by the brand name or partner'
+    WHEN 'ENS' THEN 'Information usable only by the brand name'
+    WHEN 'REF' THEN 'Do not use this Information'
+    WHEN 'DEM' THEN 'Information not requested from customer'
+    END
+  AS consent_cellphone,
+  consent_email1_code,
+  CASE consent_email1_code
+    WHEN 'PAR' THEN 'Information usable by the brand name or partner'
+    WHEN 'ENS' THEN 'Information usable only by the brand name'
+    WHEN 'REF' THEN 'Do not use this Information'
+    WHEN 'DEM' THEN 'Information not requested from customer'
+END
+  AS consent_email1,
+  consent_email2_code,
+  CASE consent_email2_code
+    WHEN 'PAR' THEN 'Information usable by the brand name or partner'
+    WHEN 'ENS' THEN 'Information usable only by the brand name'
+    WHEN 'REF' THEN 'Do not use this Information'
+    WHEN 'DEM' THEN 'Information not requested from customer'
+END
+  AS consent_email2,
+  -- Active,
+  Contactability,
+  Date_Of_Acceptance,
+  Date_Of_Opt_In_Update,
+  Sales_Associate,
+  Master_Record_Id,
+  Privacy_Policy_Acceptance,
+  Privacy_Policy_Signed,
+--   fingerprint
+FROM
+--   staging.customer_formated
+    ${ref("WRK_CUSTOMER_METRICS_PREP")}
+

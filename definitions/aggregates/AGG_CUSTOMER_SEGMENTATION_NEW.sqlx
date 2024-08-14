@@ -1,0 +1,838 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMER_SEGMENTATION",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup","segmentation_new"],
+    dependencies :["INT_PRECALC_SALES_USD"]
+}
+WITH
+  Sales AS (
+    SELECT
+    golden_id,
+    Sales_Order_Id,
+    source_Source_Id,
+    source_Sales_Order_Id,
+    customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    order_date AS sale_date,
+    LAST_VALUE(order_date) OVER (PARTITION BY golden_id, product_id ORDER BY order_date ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS recent_sale_date,
+    invoice_date,
+    transaction_type,
+    product_id,
+    sum(quantity) AS quantity_purchased,
+    sum(te_turnover) as te_turnover,
+    sum(te_turnover_full_price) as te_turnover_full_price,
+    sum(te_amount_discount) as te_amount_discount
+  FROM
+     ${ref("INT_PRECALC_SALES_USD")}
+  WHERE
+    transaction_type NOT IN ('RETURN',
+      'REFUND') 
+
+    group by golden_id,
+    Sales_Order_Id,
+    source_Source_Id,
+    source_Sales_Order_Id,
+    customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    order_date,
+    invoice_date,
+    transaction_type,
+    product_id),
+  RETURNS AS (
+  SELECT
+    golden_id,
+    Sales_Order_Id,
+    source_Source_Id,
+    source_Sales_Order_Id,
+    customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    order_date AS return_date,
+    invoice_date,
+    transaction_type,
+    product_id,
+    quantity AS quantity_returned,
+    te_turnover as te_turnover ,
+    te_turnover_full_price,
+    'original_return' as return_type
+  FROM
+     ${ref("INT_PRECALC_SALES_USD")}
+  WHERE
+    transaction_type IN ('RETURN',
+      'REFUND')  
+    union all 
+    SELECT
+    golden_id,
+    Sales_Order_Id,
+    source_Source_Id,
+    source_Sales_Order_Id,
+    customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    order_date AS return_date,
+    invoice_date,
+    transaction_type,
+    product_id,
+    sum(quantity) AS quantity_returned,
+    sum(te_turnover) as te_turnover ,
+    te_turnover_full_price,
+    'agg_return' as return_type
+
+  FROM
+     ${ref("INT_PRECALC_SALES_USD")}
+  WHERE
+    transaction_type IN ('RETURN',
+      'REFUND') 
+      and source_Source_Id = 'y2'
+      and quantity  =-1
+    group by Sales_Order_Id,
+    golden_id,
+    Sales_Order_Id,
+    source_Source_Id,
+    source_Sales_Order_Id,
+    customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    order_date ,
+    invoice_date,
+    transaction_type,
+    product_id,
+    te_turnover_full_price 
+    HAVING quantity_returned <> -1),
+  sales_with_return AS (
+  SELECT
+    s.golden_id,
+    s.Sales_Order_Id,
+    r.Sales_Order_Id AS return_sales_order_id,
+    s.source_Source_Id,
+    s.source_Sales_Order_Id,
+    s.customer_id,
+    r.customer_id AS return_customer_id,
+    s.sales_advisor_id,
+    s.store_code,
+    s.currency_id,
+    s.sale_date,
+    s.recent_sale_date,
+    return_date,
+    s.invoice_date,
+    s.transaction_type,
+    s.product_id,
+    s.quantity_purchased,
+    IFNULL(r.quantity_returned, 0) AS quantity_returned,
+    s.te_turnover AS sale_te_turnover,
+    r.te_turnover AS return_te_turnover,
+    return_type,
+    s.te_turnover_full_price as sale_te_turnover_full_price,
+    r.te_turnover_full_price as return_te_turnover_full_price,
+    s.te_amount_discount,
+    CASE
+      WHEN ABS(r.quantity_returned) = quantity_purchased AND s.product_id =r.product_id THEN true
+    ELSE
+    false
+  END
+    AS fully_returned
+  FROM
+    Sales s
+  LEFT JOIN
+    RETURNS r
+  ON
+    S.golden_id = R.golden_id
+    AND S.product_id = R.product_id
+    -- AND SAFE_DIVIDE(S.ti_turnover_full_price, S.quantity_purchased) = SAFE_DIVIDE(R.ti_turnover_full_price, R.quantity_returned)
+    AND SAFE_DIVIDE(ifnull(S.te_turnover_full_price,0), S.quantity_purchased) = SAFE_DIVIDE(ifnull(R.te_turnover_full_price,0), R.quantity_returned)
+    AND SAFE_DIVIDE(S.te_turnover, S.quantity_purchased) = SAFE_DIVIDE(R.te_turnover, R.quantity_returned)
+    
+    AND r.return_date >= s.sale_date 
+    AND ABS(r.quantity_returned) <= quantity_purchased
+    -- AND s.source_Sales_Order_Id >= r.source_Sales_Order_Id
+    AND s.source_Sales_Order_Id <= r.source_Sales_Order_Id
+    AND (
+    s.source_Source_Id not like 'sfcc%' OR
+    (s.source_Source_Id like 'sfcc%' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id)
+    )
+    -- AND 
+  -- WHERE
+    -- S.golden_id = '1626273'
+  ORDER BY
+    S.golden_id,
+    s.sale_date,
+    S.product_id )
+    ,
+ grouped_sales as (
+  select  golden_id,sales_order_id,MAX(sale_date) as order_date,
+  MAX(invoice_date) as invoice_date,
+  SUM(quantity_purchased + quantity_returned) as quantity,
+  COUNT(sales_order_id) as num_article,
+  COUNTIF(fully_returned) as num_article_returns,
+  SUM(quantity_returned) AS quantity_returned,
+  SUM(quantity_purchased) AS quantity_purchased ,
+  LOGICAL_AND(fully_returned) as fully_returned,
+  SUM(te_amount_discount) as te_amount_discount
+  from   
+  sales_with_return
+  GROUP BY golden_id,sales_order_id
+  order by golden_id,sales_order_id
+) ,
+-- select distinct * from grouped_sales where 
+-- golden_id = '1024072' --and sales_order_id = '5398121908839806534'
+-- -- quantity = 0 and fully_returned = TRUE
+agg_sales as (SELECT
+    distinct
+    golden_id AS customerlo_id,
+    COUNTIF(quantity > 0 and fully_returned = false ) AS num_orders,
+    COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) and (quantity > 0 and fully_returned = false) ) AS num_orders_last12m,
+
+    COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and (quantity > 0 and fully_returned = false) ) AS num_orders_last24m,
+    COUNTIF(order_date <= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity > 0 and fully_returned = false ) AS num_orders_last12to24m,
+    COUNTIF(quantity = 0 and fully_returned = true ) as num_returns,
+    COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last24m,
+    COUNTIF( order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last12m,
+    COUNTIF( order_date <= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last12to24m,
+    SUM(quantity) AS quantity_tot,
+    SUM(CASE WHEN order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN quantity ELSE 0 END) AS quantity_last_24m,
+    MAX(CASE WHEN fully_returned = FALSE THEN order_date END) AS last_order_date,
+    -- MAX(order_date) AS last_order_date,
+    CURRENT_DATE() AS currentdate, 
+    DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) AS month24,
+    DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AS month12,
+    count(distinct sales_order_id )as history_transactions,
+    LOGICAL_AND(fully_returned) as fully_returned,
+    COUNT(DISTINCT IF(te_amount_discount IS NULL, fully_returned = false, NULL)) AS full_price_orders,
+    COUNT(DISTINCT IF(te_amount_discount IS NOT NULL, fully_returned = false, NULL)) AS discounted_orders,
+
+
+FROM
+    grouped_sales
+  GROUP BY
+    golden_id
+),
+
+  customer_orders AS (
+  SELECT
+    -- customer_id,
+    golden_id,
+    last_order_date,
+    num_orders,
+    num_returns,
+    quantity_tot,
+    quantity_last_24m,
+    num_orders_last24m,
+    num_orders_last12to24m,
+    history_transactions,
+    num_returns_last24m,num_returns_last12to24m,
+    LOGICAL_AND(fully_returned) as fully_returned,
+    --segmentation 
+    SUM(CASE WHEN order_date <= currentdate AND order_date > month24 THEN te_turnover_usd ELSE 0 END ) AS purchase_cost,
+    SUM(CASE WHEN order_date < month12 AND order_date > month24 THEN te_turnover_usd  ELSE 0 END ) AS purchase_cost_last12to24m,
+    SUM(CASE WHEN order_date < last_order_date AND order_date > DATE_SUB(last_order_date, INTERVAL 24 MONTH) THEN te_turnover_usd ELSE 0 END ) AS purchase_previous,
+    COUNTIF(order_date < last_order_date AND order_date > DATE_SUB(last_order_date, INTERVAL 24 MONTH) and quantity_tot > 0 and fully_returned = false   ) AS order_previous,
+
+    num_orders AS nb_lifetime_transactions,
+    -- num_orders as history_transactions,
+    num_orders_last12m  as nb_transactions_last12m,
+    num_orders_last12to24m AS nb_transactions_last12to24m,
+    num_orders_last24m  AS nb_transactions_last24m,
+    -- quantity_tot AS nb_lifetime_units,
+    SUM(  quantity) AS nb_lifetime_units,
+    SUM(  IF(order_date < currentdate AND order_date >= month12, quantity, 0)) AS nb_units_last12m,
+    SUM(  IF(order_date < month12 AND order_date >= month24, quantity, 0)) AS nb_units_last12to24m,
+    SUM(  IF(order_date < currentdate AND order_date >= month24, quantity, 0)) AS nb_units_last24m,
+    IFNULL(SAFE_DIVIDE(SUM(quantity), num_orders) ,0)AS full_unit_per_ticket,
+    IFNULL(SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) ,0) AS last_12m_unit_per_ticket,
+    SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS last_12to24m_unit_per_ticket,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS last_24m_unit_per_ticket,
+    SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)) AS Last_12M_LTV,
+    SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)) AS Last_12M_LTV_TI,
+
+    SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)) AS Last_12Mto24M_LTV,      
+    SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)) AS Last_12Mto24M_LTV_TI,
+    SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)) AS Last_24M_LTV,
+    SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)) AS Last_24M_LTV_TI,
+    SUM(te_turnover_usd) AS global_ltv,
+    SAFE_DIVIDE(SUM(te_turnover_usd), COUNT(DISTINCT Sales_Order_Id)) AS full_avg_basket,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) AS avg_basket_last12m,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) AS avg_basket_last12m_ti,
+    SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_12to24m,
+    SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_12to24m_ti,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_24m,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_24m_ti,
+    SAFE_DIVIDE(SUM(te_turnover_usd), SUM(quantity)) AS full_avg_unit_price,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0))) AS avg_unit_price_last12m,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0))) AS avg_unit_price_last12m_ti,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0))) AS avg_unit_price_last24m,
+    SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0))) AS avg_unit_price_last24m_ti,
+    SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)), SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0))) AS avg_unit_price_last12to24m,
+    SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)), SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0))) AS avg_unit_price_last12to24m_ti,
+    month24,
+    month12,
+    sum(full_price_orders) as full_price_orders,
+    sum(discounted_orders) as discounted_orders
+  FROM
+     ${ref("INT_PRECALC_SALES_USD")}
+--  `mja-us-prj-dpf-ing-01-ppd.initialization.INT_PRECALC_SALES_USD`
+  INNER JOIN
+    agg_sales lo
+  ON
+    customerlo_id = golden_id
+    -- where golden_id = '1012559'
+  GROUP BY
+    -- customer_id,
+    golden_id,
+    last_order_date,
+    num_orders,
+    num_orders_last24m,month24,
+    month12,
+    quantity_tot,
+    quantity_last_24m,
+    num_orders_last12to24m,
+    num_returns_last24m,
+    history_transactions,
+    num_returns_last12to24m,
+    num_returns ,
+    num_orders_last12m ,
+    num_returns_last12m 
+  ) 
+  SELECT
+  golden_id,
+  purchase_cost,
+  quantity_tot,
+  month24,
+  month12,
+  num_orders_last24m,
+    -- num_returns_last24m,
+      -- MAX(has_recent_transaction) AS Active,
+
+  CASE 
+    when num_orders_last24m >= 0 and  quantity_last_24m > 0 and fully_returned is false
+    then TRUE 
+    else FALSE 
+  END AS Active,
+
+  CASE
+    WHEN num_orders > 1 and nb_lifetime_units > 0  THEN 'Repeater'
+    when num_orders = 1 and nb_lifetime_units > 0 THEN 'One time buyer'
+    WHEN num_orders >=0 or nb_lifetime_units >= 0 THEN NULL --'Prospect'
+    ELSE NULL
+  END AS customer_repetition,
+
+  CASE
+    WHEN num_orders_last24m > 1 and quantity_last_24m > 0  THEN 'Repeater'
+    when num_orders_last24m = 1 and quantity_last_24m > 0 THEN 'One time buyer'
+    WHEN num_orders_last24m >=0 or quantity_last_24m >= 0 THEN NULL --'Prospect'
+    ELSE NULL
+  END AS customer_segmentation,
+  CASE
+   WHEN num_orders = 0  OR quantity_tot = 0 THEN TRUE 
+   ELSE FALSE
+   END
+  AS prospect,
+  
+     CASE
+     WHEN  num_orders = 0  OR quantity_tot = 0 THEN 'Prospect'
+     WHEN last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 36 MONTH) THEN 'Lost client'
+    WHEN last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN 'Churner'
+    ELSE NULL
+  END AS customer_attrition,
+  DATE_ADD(last_order_date, INTERVAL 2 YEAR) AS Retention_Date, -- TO CHANGE
+  CASE
+      WHEN num_orders_last24m = 0  THEN NULL
+      WHEN num_orders_last24m = 1 AND purchase_cost <= 100 THEN 'Low One Time Buyer'
+      WHEN num_orders_last24m = 1 AND purchase_cost > 100 AND purchase_cost <= 500 THEN 'Core One Time Buyer'
+      WHEN num_orders_last24m = 1 AND purchase_cost > 500 AND purchase_cost <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+      WHEN num_orders_last24m = 1 AND purchase_cost > 500 AND purchase_cost <= 1500 THEN 'High One Time Buyer'
+      WHEN num_orders_last24m > 1 AND purchase_cost < 300 THEN 'Low Repeaters'
+      WHEN num_orders_last24m > 1 AND purchase_cost >= 300 AND purchase_cost<= 800 THEN 'Core Repeaters'
+      WHEN num_orders_last24m > 1 AND purchase_cost > 800 AND purchase_cost<= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+      WHEN num_orders_last24m > 1 AND purchase_cost > 800 AND purchase_cost<= 1500 THEN 'High Repeaters'
+      WHEN  num_orders_last24m >= 1 AND purchase_cost< 3000  AND purchase_cost > 1500 THEN 'VIC'
+      WHEN  num_orders_last24m >= 1 AND purchase_cost >= 3000 THEN 'VVIC'
+      ELSE NULL
+  END AS current_segment,
+  CASE
+        WHEN num_orders_last12to24m = 0  THEN NULL
+        WHEN num_orders_last12to24m = 1 AND purchase_cost_last12to24m <= 100 THEN 'Low One Time Buyer'
+        WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 100 AND purchase_cost_last12to24m<= 500 THEN 'Core One Time Buyer'
+        WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 500 AND purchase_cost_last12to24m <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+        WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 500 AND purchase_cost_last12to24m <= 1500 THEN 'High One Time Buyer'
+        WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m < 300 THEN 'Low Repeaters'
+        WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m >= 300 AND purchase_cost_last12to24m <= 800 THEN 'Core Repeaters'
+        WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m > 800 AND purchase_cost_last12to24m <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+        WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m > 800 AND purchase_cost_last12to24m <= 1500 THEN 'High Repeaters'
+        WHEN num_orders_last12to24m  >=1 AND purchase_cost_last12to24m > 1500 AND purchase_cost_last12to24m < 3000  THEN 'VIC'
+        WHEN num_orders_last12to24m  >=1 AND purchase_cost_last12to24m >= 3000 THEN 'VVIC'
+    ELSE NULL
+  END AS segment_last12to24m_name,
+  CASE
+      WHEN order_previous = 0  THEN NULL
+      WHEN order_previous = 1 AND purchase_previous <= 100 THEN 'Low One Time Buyer'
+      WHEN order_previous = 1 AND purchase_previous > 100 AND purchase_previous<= 500 THEN 'Core One Time Buyer'
+      WHEN order_previous = 1 AND purchase_previous > 500 AND purchase_previous <= 1500  AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+      WHEN order_previous = 1 AND purchase_previous > 500 AND purchase_previous <= 1500  THEN 'High One Time Buyer'
+      WHEN order_previous > 1 AND purchase_previous < 300 THEN 'Low Repeaters'
+      WHEN order_previous > 1 AND purchase_previous >= 300 AND purchase_previous<= 800 THEN 'Core Repeaters'
+      WHEN order_previous > 1 AND purchase_previous > 800 AND purchase_previous<= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+      WHEN order_previous > 1 AND purchase_previous > 800 AND purchase_previous<= 1500 THEN 'High Repeaters'
+      WHEN order_previous >= 1 AND purchase_previous > 1500 AND purchase_previous< 3000 THEN 'VIC'
+      WHEN order_previous >= 1 AND purchase_previous >= 3000 THEN 'VVIC'
+      ELSE NULL END AS previous_rfm_segment,
+  nb_lifetime_transactions ,
+  nb_transactions_last12m,
+  nb_transactions_last12to24m,
+  nb_transactions_last24m,
+  nb_lifetime_units,
+  nb_units_last12m,
+  nb_units_last12to24m,
+  nb_units_last24m,
+  full_unit_per_ticket,
+  last_12m_unit_per_ticket,
+  last_12to24m_unit_per_ticket,
+  last_24m_unit_per_ticket,
+  Global_LTV,
+  Last_12M_LTV,
+  Last_12M_LTV_TI,
+  Last_12Mto24M_LTV,
+  Last_12Mto24M_LTV_TI,
+  Last_24M_LTV,
+  Last_24M_LTV_TI,
+  full_avg_basket,
+  avg_basket_last12m,
+  avg_basket_last12m_ti,
+  avg_basket_last_12to24m,
+  avg_basket_last_12to24m_ti,
+  avg_basket_last_24m,
+  avg_basket_last_24m_ti,
+  full_avg_unit_price,
+  avg_unit_price_last12m,
+  avg_unit_price_last12m_ti,
+  avg_unit_price_last24m,
+  avg_unit_price_last24m_ti,
+  avg_unit_price_last12to24m,
+  avg_unit_price_last12to24m_ti,
+  history_transactions,
+  fully_returned
+FROM
+  customer_orders
+
+    
+    
+-- =======
+-- config {
+--     type: "table",
+--     schema: "aggregates",
+--     name: "AGG_CUSTOMER_SEGMENTATION",
+--     tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup","segmentation_new"],
+--     dependencies :["INT_PRECALC_SALES_USD"]
+-- }
+-- WITH
+--   Sales AS (
+--     SELECT
+--     golden_id,
+--     Sales_Order_Id,
+--     source_Source_Id,
+--     source_Sales_Order_Id,
+--     customer_id,
+--     sales_advisor_id,
+--     store_code,
+--     currency_id,
+--     order_date AS sale_date,
+--     LAST_VALUE(order_date) OVER (PARTITION BY golden_id, product_id ORDER BY order_date ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS recent_sale_date,
+--     invoice_date,
+--     transaction_type,
+--     product_id,
+--     sum(quantity) AS quantity_purchased,
+--     sum(te_turnover) as te_turnover,
+--     sum(te_turnover_full_price) as te_turnover_full_price
+--   FROM
+--      ${ref("INT_PRECALC_SALES_USD")}
+--   WHERE
+--     transaction_type NOT IN ('RETURN',
+--       'REFUND') 
+
+--     group by golden_id,
+--     Sales_Order_Id,
+--     source_Source_Id,
+--     source_Sales_Order_Id,
+--     customer_id,
+--     sales_advisor_id,
+--     store_code,
+--     currency_id,
+--     order_date,
+--     invoice_date,
+--     transaction_type,
+--     product_id),
+--   RETURNS AS (
+--   SELECT
+--     golden_id,
+--     Sales_Order_Id,
+--     source_Source_Id,
+--     source_Sales_Order_Id,
+--     customer_id,
+--     sales_advisor_id,
+--     store_code,
+--     currency_id,
+--     order_date AS return_date,
+--     invoice_date,
+--     transaction_type,
+--     product_id,
+--     quantity AS quantity_returned,
+--     te_turnover as te_turnover ,
+--     te_turnover_full_price,
+--     'original_return' as return_type
+--   FROM
+--      ${ref("INT_PRECALC_SALES_USD")}
+--   WHERE
+--     transaction_type IN ('RETURN',
+--       'REFUND')  
+--     union all 
+--     SELECT
+--     golden_id,
+--     Sales_Order_Id,
+--     source_Source_Id,
+--     source_Sales_Order_Id,
+--     customer_id,
+--     sales_advisor_id,
+--     store_code,
+--     currency_id,
+--     order_date AS return_date,
+--     invoice_date,
+--     transaction_type,
+--     product_id,
+--     sum(quantity) AS quantity_returned,
+--     sum(te_turnover) as te_turnover ,
+--     te_turnover_full_price,
+--     'agg_return' as return_type
+
+--   FROM
+--      ${ref("INT_PRECALC_SALES_USD")}
+--   WHERE
+--     transaction_type IN ('RETURN',
+--       'REFUND') 
+--       and source_Source_Id = 'y2'
+--       and quantity  =-1
+--     group by Sales_Order_Id,
+--     golden_id,
+--     Sales_Order_Id,
+--     source_Source_Id,
+--     source_Sales_Order_Id,
+--     customer_id,
+--     sales_advisor_id,
+--     store_code,
+--     currency_id,
+--     order_date ,
+--     invoice_date,
+--     transaction_type,
+--     product_id,
+--     te_turnover_full_price 
+--     HAVING quantity_returned <> -1),
+--   sales_with_return AS (
+--   SELECT
+--     s.golden_id,
+--     s.Sales_Order_Id,
+--     r.Sales_Order_Id AS return_sales_order_id,
+--     s.source_Source_Id,
+--     s.source_Sales_Order_Id,
+--     s.customer_id,
+--     r.customer_id AS return_customer_id,
+--     s.sales_advisor_id,
+--     s.store_code,
+--     s.currency_id,
+--     s.sale_date,
+--     s.recent_sale_date,
+--     return_date,
+--     s.invoice_date,
+--     s.transaction_type,
+--     s.product_id,
+--     s.quantity_purchased,
+--     IFNULL(r.quantity_returned, 0) AS quantity_returned,
+--     s.te_turnover AS sale_te_turnover,
+--     r.te_turnover AS return_te_turnover,
+--     return_type,
+--     s.te_turnover_full_price as sale_te_turnover_full_price,
+--     r.te_turnover_full_price as return_te_turnover_full_price,
+--     CASE
+--       WHEN ABS(r.quantity_returned) = quantity_purchased AND s.product_id =r.product_id THEN true
+--     ELSE
+--     false
+--   END
+--     AS fully_returned
+--   FROM
+--     Sales s
+--   LEFT JOIN
+--     RETURNS r
+--   ON
+--     S.golden_id = R.golden_id
+--     AND S.product_id = R.product_id
+--     -- AND SAFE_DIVIDE(S.ti_turnover_full_price, S.quantity_purchased) = SAFE_DIVIDE(R.ti_turnover_full_price, R.quantity_returned)
+--     AND SAFE_DIVIDE(ifnull(S.te_turnover_full_price,0), S.quantity_purchased) = SAFE_DIVIDE(ifnull(R.te_turnover_full_price,0), R.quantity_returned)
+
+--     AND SAFE_DIVIDE(S.te_turnover, S.quantity_purchased) = SAFE_DIVIDE(R.te_turnover, R.quantity_returned)
+--     AND r.return_date >= s.sale_date AND r.return_date <= DATE_ADD(s.recent_sale_date, INTERVAL 30 DAY)
+--     AND ABS(r.quantity_returned) <= quantity_purchased
+--     AND s.source_Sales_Order_Id >= r.source_Sales_Order_Id
+
+--     AND (
+--     s.source_Source_Id <> 'sfcc' OR
+--     (s.source_Source_Id = 'sfcc' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id)
+--     )
+--     -- AND 
+--   -- WHERE
+--     -- S.golden_id = '1626273'
+--   ORDER BY
+--     S.golden_id,
+--     s.sale_date,
+--     S.product_id )
+--     ,
+--  grouped_sales as (
+--   select  golden_id,sales_order_id,MAX(sale_date) as order_date,
+--   MAX(invoice_date) as invoice_date,
+--   SUM(quantity_purchased + quantity_returned) as quantity,
+--   COUNT(sales_order_id) as num_article,
+--   COUNTIF(fully_returned) as num_article_returns,
+--   SUM(quantity_returned) AS quantity_returned,
+--   SUM(quantity_purchased) AS quantity_purchased ,
+--   LOGICAL_AND(fully_returned) as fully_returned
+--   from   
+--   sales_with_return
+--   GROUP BY golden_id,sales_order_id
+--   order by golden_id,sales_order_id
+-- ) ,
+-- -- select distinct * from grouped_sales where 
+-- -- golden_id = '1024072' --and sales_order_id = '5398121908839806534'
+-- -- -- quantity = 0 and fully_returned = TRUE
+-- agg_sales as (SELECT
+--     distinct
+--     golden_id AS customerlo_id,
+--     COUNTIF(quantity > 0 and fully_returned = false ) AS num_orders,
+--     COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) and (quantity > 0 and fully_returned = false) ) AS num_orders_last12m,
+
+--     COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and (quantity > 0 and fully_returned = false) ) AS num_orders_last24m,
+--     COUNTIF(order_date <= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity > 0 and fully_returned = false ) AS num_orders_last12to24m,
+--     COUNTIF(quantity = 0 and fully_returned = true ) as num_returns,
+--     COUNTIF(order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last24m,
+--     COUNTIF( order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last12m,
+--     COUNTIF( order_date <= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) and quantity = 0 and fully_returned = true ) as num_returns_last12to24m,
+--     SUM(quantity) AS quantity_tot,
+--     SUM(CASE WHEN order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN quantity ELSE 0 END) AS quantity_last_24m,
+--     MAX(CASE WHEN fully_returned = FALSE THEN order_date END) AS last_order_date,
+--     -- MAX(order_date) AS last_order_date,
+--     CURRENT_DATE() AS currentdate, 
+--     DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) AS month24,
+--     DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) AS month12,
+--     count(distinct sales_order_id )as history_transactions,
+--     LOGICAL_AND(fully_returned) as fully_returned
+
+
+-- FROM
+--     grouped_sales
+--   GROUP BY
+--     golden_id
+-- ),
+
+--   customer_orders AS (
+--   SELECT
+--     -- customer_id,
+--     golden_id,
+--     last_order_date,
+--     num_orders,
+--     num_returns,
+--     quantity_tot,
+--     quantity_last_24m,
+--     num_orders_last24m,
+--     num_orders_last12to24m,
+--     history_transactions,
+--     num_returns_last24m,num_returns_last12to24m,
+--     LOGICAL_AND(fully_returned) as fully_returned,
+--     --segmentation 
+--     SUM(CASE WHEN order_date <= currentdate AND order_date > month24 THEN te_turnover_usd ELSE 0 END ) AS purchase_cost,
+--     SUM(CASE WHEN order_date < month12 AND order_date > month24 THEN te_turnover_usd  ELSE 0 END ) AS purchase_cost_last12to24m,
+--     SUM(CASE WHEN order_date < last_order_date AND order_date > DATE_SUB(last_order_date, INTERVAL 24 MONTH) THEN te_turnover_usd ELSE 0 END ) AS purchase_previous,
+--     COUNTIF(order_date < last_order_date AND order_date > DATE_SUB(last_order_date, INTERVAL 24 MONTH) and quantity_tot > 0 and fully_returned = false   ) AS order_previous,
+
+--     num_orders AS nb_lifetime_transactions,
+--     -- num_orders as history_transactions,
+--     num_orders_last12m  as nb_transactions_last12m,
+--     num_orders_last12to24m AS nb_transactions_last12to24m,
+--     num_orders_last24m  AS nb_transactions_last24m,
+--     -- quantity_tot AS nb_lifetime_units,
+--     SUM(  quantity) AS nb_lifetime_units,
+--     SUM(  IF(order_date < currentdate AND order_date >= month12, quantity, 0)) AS nb_units_last12m,
+--     SUM(  IF(order_date < month12 AND order_date >= month24, quantity, 0)) AS nb_units_last12to24m,
+--     SUM(  IF(order_date < currentdate AND order_date >= month24, quantity, 0)) AS nb_units_last24m,
+--     IFNULL(SAFE_DIVIDE(SUM(quantity), num_orders) ,0)AS full_unit_per_ticket,
+--     IFNULL(SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) ,0) AS last_12m_unit_per_ticket,
+--     SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS last_12to24m_unit_per_ticket,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS last_24m_unit_per_ticket,
+--     SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)) AS Last_12M_LTV,
+--     SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)) AS Last_12M_LTV_TI,
+
+--     SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)) AS Last_12Mto24M_LTV,      
+--     SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)) AS Last_12Mto24M_LTV_TI,
+--     SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)) AS Last_24M_LTV,
+--     SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)) AS Last_24M_LTV_TI,
+--     SUM(te_turnover_usd) AS global_ltv,
+--     SAFE_DIVIDE(SUM(te_turnover_usd), COUNT(DISTINCT Sales_Order_Id)) AS full_avg_basket,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) AS avg_basket_last12m,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month12, Sales_Order_Id, NULL))) AS avg_basket_last12m_ti,
+--     SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_12to24m,
+--     SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < month12 AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_12to24m_ti,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_24m,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)), COUNT(DISTINCT IF(order_date < currentdate AND order_date >= month24, Sales_Order_Id, NULL))) AS avg_basket_last_24m_ti,
+--     SAFE_DIVIDE(SUM(te_turnover_usd), SUM(quantity)) AS full_avg_unit_price,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, te_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0))) AS avg_unit_price_last12m,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month12, ti_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month12, quantity, 0))) AS avg_unit_price_last12m_ti,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, te_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0))) AS avg_unit_price_last24m,
+--     SAFE_DIVIDE(SUM(IF(order_date < currentdate AND order_date >= month24, ti_turnover_usd, 0)), SUM(IF(order_date < currentdate AND order_date >= month24, quantity, 0))) AS avg_unit_price_last24m_ti,
+--     SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, te_turnover_usd, 0)), SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0))) AS avg_unit_price_last12to24m,
+--     SAFE_DIVIDE(SUM(IF(order_date < month12 AND order_date >= month24, ti_turnover_usd, 0)), SUM(IF(order_date < month12 AND order_date >= month24, quantity, 0))) AS avg_unit_price_last12to24m_ti,
+--     month24,
+--     month12,
+
+--   FROM
+--      ${ref("INT_PRECALC_SALES_USD")}
+-- --  `mja-us-prj-dpf-ing-01-ppd.initialization.INT_PRECALC_SALES_USD`
+--   INNER JOIN
+--     agg_sales lo
+--   ON
+--     customerlo_id = golden_id
+--     -- where golden_id = '1012559'
+--   GROUP BY
+--     -- customer_id,
+--     golden_id,
+--     last_order_date,
+--     num_orders,
+--     num_orders_last24m,month24,
+--     month12,
+--     quantity_tot,
+--     quantity_last_24m,
+--     num_orders_last12to24m,
+--     num_returns_last24m,
+--     history_transactions,
+--     num_returns_last12to24m,
+--     num_returns ,
+--     num_orders_last12m ,
+--     num_returns_last12m 
+--   ) 
+--   SELECT
+--   golden_id,
+--   purchase_cost,
+--   quantity_tot,
+--   month24,
+--   month12,
+--   num_orders_last24m,
+--     -- num_returns_last24m,
+--       -- MAX(has_recent_transaction) AS Active,
+
+--   CASE 
+--     when num_orders_last24m >= 0 and  quantity_last_24m > 0 and fully_returned is false
+--     then TRUE 
+--     else FALSE 
+--   END AS Active,
+
+--   CASE
+--     WHEN num_orders_last24m > 1 and quantity_last_24m > 0  THEN 'Repeater'
+--     when num_orders_last24m = 1 and quantity_last_24m > 0 THEN 'One time buyer'
+--     WHEN num_orders_last24m >=0 or quantity_last_24m >= 0 THEN NULL --'Prospect'
+--     ELSE NULL
+--   END AS customer_segmentation,
+--   CASE
+--    WHEN num_orders = 0  OR quantity_tot = 0 THEN TRUE 
+--    ELSE FALSE
+--    END
+--   AS prospect,
+  
+--      CASE
+--    WHEN num_orders = 0  THEN 'Prospect'
+--     WHEN last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 36 MONTH) THEN 'Lost client'
+--     WHEN last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN 'Churner'
+--     ELSE NULL
+--   END AS customer_attrition,
+--   DATE_ADD(last_order_date, INTERVAL 2 YEAR) AS Retention_Date, -- TO CHANGE
+--   CASE
+--       WHEN num_orders_last24m = 0  THEN NULL
+--       WHEN num_orders_last24m = 1 AND purchase_cost <= 100 THEN 'Low One Time Buyer'
+--       WHEN num_orders_last24m = 1 AND purchase_cost > 100 AND purchase_cost <= 500 THEN 'Core One Time Buyer'
+--       WHEN num_orders_last24m = 1 AND purchase_cost > 500 AND purchase_cost <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+--       WHEN num_orders_last24m = 1 AND purchase_cost > 500 AND purchase_cost <= 1500 THEN 'High One Time Buyer'
+--       WHEN num_orders_last24m > 1 AND purchase_cost < 300 THEN 'Low Repeaters'
+--       WHEN num_orders_last24m > 1 AND purchase_cost >= 300 AND purchase_cost<= 800 THEN 'Core Repeaters'
+--       WHEN num_orders_last24m > 1 AND purchase_cost > 800 AND purchase_cost<= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+--       WHEN num_orders_last24m > 1 AND purchase_cost > 800 AND purchase_cost<= 1500 THEN 'High Repeaters'
+--       WHEN  num_orders_last24m >= 1 AND purchase_cost< 3000  AND purchase_cost > 1500 THEN 'VIC'
+--       WHEN  num_orders_last24m >= 1 AND purchase_cost >= 3000 THEN 'VVIC'
+--       ELSE NULL
+--   END AS current_segment,
+--   CASE
+--         WHEN num_orders_last12to24m = 0  THEN NULL
+--         WHEN num_orders_last12to24m = 1 AND purchase_cost_last12to24m <= 100 THEN 'Low One Time Buyer'
+--         WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 100 AND purchase_cost_last12to24m<= 500 THEN 'Core One Time Buyer'
+--         WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 500 AND purchase_cost_last12to24m <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+--         WHEN num_orders_last12to24m  = 1 AND purchase_cost_last12to24m > 500 AND purchase_cost_last12to24m <= 1500 THEN 'High One Time Buyer'
+--         WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m < 300 THEN 'Low Repeaters'
+--         WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m >= 300 AND purchase_cost_last12to24m <= 800 THEN 'Core Repeaters'
+--         WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m > 800 AND purchase_cost_last12to24m <= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+--         WHEN num_orders_last12to24m  > 1 AND purchase_cost_last12to24m > 800 AND purchase_cost_last12to24m <= 1500 THEN 'High Repeaters'
+--         WHEN num_orders_last12to24m  >=1 AND purchase_cost_last12to24m > 1500 AND purchase_cost_last12to24m < 3000  THEN 'VIC'
+--         WHEN num_orders_last12to24m  >=1 AND purchase_cost_last12to24m >= 3000 THEN 'VVIC'
+--     ELSE NULL
+--   END AS segment_last12to24m_name,
+--   CASE
+--       WHEN order_previous = 0  THEN NULL
+--       WHEN order_previous = 1 AND purchase_previous <= 100 THEN 'Low One Time Buyer'
+--       WHEN order_previous = 1 AND purchase_previous > 100 AND purchase_previous<= 500 THEN 'Core One Time Buyer'
+--       WHEN order_previous = 1 AND purchase_previous > 500 AND purchase_previous <= 1500  AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High One Time Buyer'
+--       WHEN order_previous = 1 AND purchase_previous > 500 AND purchase_previous <= 1500  THEN 'High One Time Buyer'
+--       WHEN order_previous > 1 AND purchase_previous < 300 THEN 'Low Repeaters'
+--       WHEN order_previous > 1 AND purchase_previous >= 300 AND purchase_previous<= 800 THEN 'Core Repeaters'
+--       WHEN order_previous > 1 AND purchase_previous > 800 AND purchase_previous<= 1500 AND DATE_DIFF(CURRENT_DATE(), last_order_date, MONTH) <= 3 THEN 'New High Repeaters'
+--       WHEN order_previous > 1 AND purchase_previous > 800 AND purchase_previous<= 1500 THEN 'High Repeaters'
+--       WHEN order_previous >= 1 AND purchase_previous > 1500 AND purchase_previous< 3000 THEN 'VIC'
+--       WHEN order_previous >= 1 AND purchase_previous >= 3000 THEN 'VVIC'
+--       ELSE NULL END AS previous_rfm_segment,
+--   nb_lifetime_transactions ,
+--   nb_transactions_last12m,
+--   nb_transactions_last12to24m,
+--   nb_transactions_last24m,
+--   nb_lifetime_units,
+--   nb_units_last12m,
+--   nb_units_last12to24m,
+--   nb_units_last24m,
+--   full_unit_per_ticket,
+--   last_12m_unit_per_ticket,
+--   last_12to24m_unit_per_ticket,
+--   last_24m_unit_per_ticket,
+--   Global_LTV,
+--   Last_12M_LTV,
+--   Last_12M_LTV_TI,
+--   Last_12Mto24M_LTV,
+--   Last_12Mto24M_LTV_TI,
+--   Last_24M_LTV,
+--   Last_24M_LTV_TI,
+--   full_avg_basket,
+--   avg_basket_last12m,
+--   avg_basket_last12m_ti,
+--   avg_basket_last_12to24m,
+--   avg_basket_last_12to24m_ti,
+--   avg_basket_last_24m,
+--   avg_basket_last_24m_ti,
+--   full_avg_unit_price,
+--   avg_unit_price_last12m,
+--   avg_unit_price_last12m_ti,
+--   avg_unit_price_last24m,
+--   avg_unit_price_last24m_ti,
+--   avg_unit_price_last12to24m,
+--   avg_unit_price_last12to24m_ti,
+--   history_transactions
+-- FROM
+--   customer_orders
+
+    
+    
+-- >>>>>>> refs/heads/main

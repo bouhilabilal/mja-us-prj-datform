@@ -1,0 +1,43 @@
+config {  
+ type: "view",
+    schema: "snapshot",
+    name: "segmentation_evolution",
+    dependencies: [ "DI_CUSTOMERS", "CUSTOMERS_SNAPSHOT" ]
+    }
+
+SELECT
+  DISTINCT latest_snapshot.snapshot_date,
+  curent_cust.Customer_Id,
+--   curent_cust.store_code,
+--   curent_cust.product_id ,
+  curent_cust.current_segment AS current_segment,
+  curent_cust.segment_rank AS current_rank,
+  latest_snapshot.current_segment AS hist_current_segment,
+  latest_snapshot.segment_rank AS hist_current_rank
+FROM (
+  SELECT
+    Customer_Id,
+    current_segment,
+    `Order` AS segment_rank
+  FROM
+    dimensions.DI_CUSTOMERS
+  LEFT JOIN
+    dimensions.DI_SEGMENTS
+  ON
+    Segment = current_segment) curent_cust
+LEFT JOIN (
+  SELECT
+    Customer_Id,
+    current_segment,
+    snapshot_date,
+    `Order` AS segment_rank,
+    ROW_NUMBER() OVER (PARTITION BY Customer_Id ORDER BY snapshot_date DESC) AS rn
+  FROM
+    snapshot.CUSTOMERS_SNAPSHOT
+  LEFT JOIN
+    dimensions.DI_SEGMENTS
+  ON
+    Segment = current_segment ) latest_snapshot
+ON
+  curent_cust.Customer_Id = latest_snapshot.Customer_Id
+  AND latest_snapshot.rn = 1

@@ -1,0 +1,70 @@
+config {
+  type: "table",
+  schema: "initialization",
+  name: "INT_PRODUCTS",
+  description: "Table with fixed data types for each column",
+    tags: ["dimensions", "initialization","PRODUCTS"]
+}
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+SELECT 
+  Product_ID,
+  Style,
+  SKU,
+  Barcode___UPC as Barcode_UPC,
+  SID,
+  External_ID,
+  Product_Name,
+  Brand,
+  Design_Season_Code,
+  Design_Season,
+  Season,
+  In_Store_Month,
+  Season_Year,
+  Variant_status,
+  -- PARSE_DATE('%Y%m%d', CAST( Created_Date AS String )) AS Created_Date,
+  -- PARSE_DATE('%Y%m%d', CAST( Modified_Date AS String )) AS Modified_Date,
+    PARSE_DATE('%Y%m%d', CASE WHEN TRIM(Created_Date) = '' THEN NULL ELSE Created_Date END) AS Created_Date,
+  PARSE_DATE('%Y%m%d', CASE WHEN TRIM(Modified_Date) = '' THEN NULL ELSE Modified_Date END) AS Modified_Date,
+
+  Division_Code,
+  Division,
+  Category_Code,
+  Category,
+  Class_Code,
+  Class,
+  Subclass_Code,
+  Subclass,
+  MJ_Division_Code,
+  MJ_Division,
+  Merch_Collection,
+  Merch_Theme,
+  Group_Code,
+  `Group`,
+  Line_Code,
+  Line,
+  Department_Code,
+  Department,
+  Subdepartment_Code,
+  Subdepartment,
+  Report_Category,
+  Report_Category_Detail,
+  Color_Code,
+  Color,
+  Size,
+  Size_rank,
+  Composition_Code,
+  Composition,
+  Gender,
+  MJ_Product_Life_Cycle,
+  Product_Life_Cycle_Type,
+  Country_of_origin_Iso3,
+  Country_of_origin_Iso2,
+  Country_of_origin,
+  MJ_Core_Assortment,
+  
+FROM 
+  mja_us_bqd_dpf_ax_01_${env_prefix}.AX_PRODUCTS

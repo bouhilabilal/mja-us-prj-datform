@@ -1,0 +1,38 @@
+config {
+    type: "incremental",
+    schema: "dimensions",
+    name: "DI_COSTS",
+    tags: ["dimensions", "COSTS"],
+    uniqueKey: ["product_color_id", "currency_code", "cost_id"]
+}
+
+WITH
+  costs AS (
+  SELECT
+    product_color_id,
+    currency_code,
+    cost_id,
+    cost_value,
+    company_code,
+    TO_HEX(MD5(CONCAT( ifnull(product_color_id,''), ifnull(currency_code,''), ifnull(cost_id,''), ifnull(cost_value,0), ifnull(company_code,'') ))) AS row_hash
+  FROM
+    ${ref("INT_COSTS")})
+SELECT
+  ori.product_color_id,
+  ori.currency_code,
+  ori.cost_id,
+  ori.cost_value,
+  ori.company_code,
+  ori.row_hash
+FROM
+  costs ori
+
+    ${when(incremental(), `
+    LEFT JOIN ${self()} destination 
+    on CAST ( IFNULL(destination.product_color_id,'') AS string ) = ori.product_color_id
+    and ifnull(destination.currency_code,'') = ifnull(ori.currency_code,'')
+    and ifnull(destination.cost_value,0) = ifnull(ori.cost_value,0)
+    and ifnull(destination.company_code,'') = ifnull(ori.company_code,'')
+    where ifnull(destination.row_hash,'') <> ori.row_hash
+      and destination.row_hash is not null`) }
+

@@ -1,0 +1,214 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_CUSTOMERS_Y2_CLEANED_updated",
+        dependencies: [ "DI_SALES_ADVISOR" ],
+
+    tags: ["dimensions", "initialization","CUSTOMERS","duplicate"]
+}
+js {
+    const {
+        largest
+    } = require("includes/merging_functions/merge_cross_source.js");
+}
+WITH
+  last_cust_purchase AS (
+SELECT
+  cust.Sources_Source_Customer_Id,
+  MAX(sal.order_date) AS purchase_date,
+  billing_Address,
+    billing_ZipCode ,
+    billing_City,
+    billing_State,
+    billing_CountryID,
+    billing_Country_Name,
+    billing_Phone_Number
+  
+FROM
+  ${ref("INT_CUSTOMERS_Y2")} cust
+INNER JOIN (
+  SELECT
+    customer_id,
+    MAX(order_date) AS order_date,
+    billing_Address,
+    billing_ZipCode ,
+    billing_City,
+    billing_State,
+    billing_CountryID,
+    billing_Country_Name,
+    billing_Phone_Number
+  FROM (
+    SELECT
+      source_customer_id as customer_id,
+      order_date,
+      Billing_Address[SAFE_OFFSET(0)].Address as billing_Address,
+    Billing_Address[SAFE_OFFSET(0)].ZipCode as billing_ZipCode ,
+    Billing_Address[SAFE_OFFSET(0)].City as billing_City,
+    Billing_Address[SAFE_OFFSET(0)].State as billing_State,
+    Billing_Address[SAFE_OFFSET(0)].CountryID as billing_CountryID,
+    Billing_Address[SAFE_OFFSET(0)].Country_Name as billing_Country_Name,
+    case when Billing_Address[SAFE_OFFSET(0)].Phone_Number is null then Shipping_Address[SAFE_OFFSET(0)].Phone_Number else  Billing_Address[SAFE_OFFSET(0)].Phone_Number end as billing_Phone_Number
+    FROM
+      `facts.FACT_SALES`
+    UNION ALL
+    SELECT
+      source_customer_id as customer_id,
+      order_date,
+      Billing_Address[SAFE_OFFSET(0)].Address as billing_Address,
+    Billing_Address[SAFE_OFFSET(0)].ZipCode as billing_ZipCode ,
+    Billing_Address[SAFE_OFFSET(0)].City as billing_City,
+    Billing_Address[SAFE_OFFSET(0)].State as billing_State,
+    Billing_Address[SAFE_OFFSET(0)].CountryID as billing_CountryID,
+    Billing_Address[SAFE_OFFSET(0)].Country_Name as billing_Country_Name,
+    case when Billing_Address[SAFE_OFFSET(0)].Phone_Number is null then Shipping_Address[SAFE_OFFSET(0)].Phone_Number else  Billing_Address[SAFE_OFFSET(0)].Phone_Number end as billing_Phone_Number
+    FROM
+      ${ref("AGG_SALES")}  --########################################
+  ) AS combined_sales
+  GROUP BY
+    customer_id,
+    billing_Address,
+    billing_ZipCode ,
+    billing_City,
+    billing_State,
+    billing_CountryID,
+    billing_Country_Name,
+    billing_Phone_Number
+) sal ON sal.customer_id = cust.Sources_Source_Customer_Id
+GROUP BY
+  cust.Sources_Source_Customer_Id,
+  billing_Address,
+  billing_ZipCode ,
+  billing_City,
+  billing_State,
+  billing_CountryID,
+  billing_Country_Name,
+  billing_Phone_Number
+
+)
+
+--   ${ref("SRC_CUSTOMERS_SFCC")} cust
+, sfcc_cutomers as (SELECT
+  cust.*,
+  case 
+    when cust.Phone_cell_phone is null then cust.Phone_home_phone
+    else cust.Phone_cell_phone end
+    as phone,
+  CASE
+    WHEN purchase_date IS NOT NULL THEN purchase_date
+  ELSE
+  cust.Last_Modified_Date
+END
+  AS Last_purchase_date,
+    billing_Address,
+  billing_ZipCode ,
+  billing_City,
+  billing_State,
+  billing_CountryID,
+  billing_Country_Name,
+  billing_Phone_Number,
+  -- tech_golden_id
+FROM
+  ${ref("INT_CUSTOMERS_Y2")} cust
+LEFT JOIN
+  last_cust_purchase lcp
+ON
+  cust.Sources_Source_Customer_Id = lcp.Sources_Source_Customer_Id
+-- left join snapshot.GOLDEN_ID_REF  ref
+-- on ref.Source_Customer_Id = cust.Sources_Source_Customer_Id
+)
+  select 
+  COALESCE(self.Sources_Source_Id, ecom.Sources_Source_Id) AS Sources_Source_Id,
+  COALESCE(self.Sources_Source_Customer_Id, ecom.Sources_Source_Customer_Id) AS Sources_Source_Customer_Id,
+  COALESCE(self.Sources_Account_id, ecom.Sources_Account_id) AS Sources_Account_id,
+  ifnull(COALESCE(ecom.Sources_Created_By_Id, self.Sources_Created_By_Id),sa.store_code ) AS Sources_Created_By_Id,
+  COALESCE(ecom.last_name, self.last_name) AS last_name,
+  COALESCE(ecom.middle_name, self.middle_name) AS middle_name,
+  COALESCE(ecom.first_name, self.first_name) AS first_name,
+  COALESCE(ecom.Email_value, self.Email_value) AS email,
+  ifnull(COALESCE(ecom.phone, self.phone),billing_Phone_Number) AS phone,
+  ifnull(COALESCE(ecom.Phone_cell_phone, self.Phone_cell_phone),billing_Phone_Number) AS Phone_cell_phone,
+  COALESCE(ecom.Email_main_email, self.Email_main_email) AS Email_main_email,
+  COALESCE(ecom.Email_source_id, self.Email_source_id) AS Email_source_id,
+  COALESCE(ecom.phone_main_phone, self.phone_main_phone) AS phone_main_phone,
+  COALESCE(ecom.Phone_source_id, self.Phone_source_id) AS Phone_source_id,
+  COALESCE(ecom.Phone_home_phone, self.Phone_home_phone) AS Phone_home_phone,
+  COALESCE(ecom.Phone_office_phone, self.Phone_office_phone) AS Phone_office_phone,
+  COALESCE(ecom.fictitious_customer, self.fictitious_customer) AS fictitious_customer,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_Address, self.Prefered_Postal_Address_Address),billing_Address) AS Prefered_Postal_Address_Address,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_ZipCode, self.Prefered_Postal_Address_ZipCode),billing_ZipCode) AS Prefered_Postal_Address_ZipCode,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_City, self.Prefered_Postal_Address_City),billing_City) AS Prefered_Postal_Address_City,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_State, self.Prefered_Postal_Address_State),billing_State) AS Prefered_Postal_Address_State,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_CountryId, self.Prefered_Postal_Address_CountryId),billing_CountryID) AS Prefered_Postal_Address_CountryId,
+  -- ifnull(COALESCE(ecom.Prefered_Postal_Address_CountryName, self.Prefered_Postal_Address_CountryName),billing_Country_Name) AS Prefered_Postal_Address_CountryName,
+  COALESCE(ecom.Prefered_Postal_Address_Address, self.Prefered_Postal_Address_Address)AS Prefered_Postal_Address_Address,
+  COALESCE(ecom.Prefered_Postal_Address_ZipCode, self.Prefered_Postal_Address_ZipCode) AS Prefered_Postal_Address_ZipCode,
+  COALESCE(ecom.Prefered_Postal_Address_City, self.Prefered_Postal_Address_City) AS Prefered_Postal_Address_City,
+  COALESCE(ecom.Prefered_Postal_Address_State, self.Prefered_Postal_Address_State) AS Prefered_Postal_Address_State,
+  COALESCE(ecom.Prefered_Postal_Address_CountryId, self.Prefered_Postal_Address_CountryId) AS Prefered_Postal_Address_CountryId,
+  COALESCE(ecom.Prefered_Postal_Address_CountryName, self.Prefered_Postal_Address_CountryName) AS Prefered_Postal_Address_CountryName,
+  COALESCE(ecom.LANGUAGE, self.LANGUAGE) AS LANGUAGE,
+  COALESCE(ecom.Nationality, self.Nationality) AS Nationality,
+  COALESCE(ecom.birthdate, self.birthdate) AS birthdate,
+  COALESCE(ecom.Salutation, self.Salutation) AS Salutation,
+-- COALESCE(ecom.Salutation_Gender, self.Salutation_Gender) AS Salutation_Gender,
+COALESCE(
+  UPPER(
+    CASE 
+      WHEN ecom.Salutation_Gender = '' OR ecom.Salutation_Gender = ' ' THEN NULL
+      WHEN UPPER(ecom.Salutation_Gender) = 'M'  THEN 'MALE'
+      WHEN UPPER(ecom.Salutation_Gender) like '%MALE%'  THEN 'MALE'
+      WHEN UPPER(ecom.Salutation_Gender) = 'F'  THEN 'FEMALE'
+      WHEN UPPER(ecom.Salutation_Gender) like '%FEMALE%'  THEN 'FEMALE'
+      WHEN UPPER(ecom.Salutation_Gender) = 'OTHER'  THEN 'OTHER'
+    END
+    ), 
+  UPPER(
+  CASE 
+      WHEN self.Salutation_Gender = '' OR self.Salutation_Gender = ' ' THEN NULL
+      WHEN UPPER(self.Salutation_Gender) = 'M'  THEN 'MALE'
+      WHEN UPPER(self.Salutation_Gender) like '%MALE%'  THEN 'MALE'
+      WHEN UPPER(self.Salutation_Gender) = 'F'  THEN 'FEMALE'
+      WHEN UPPER(self.Salutation_Gender) like '%FEMALE%'  THEN 'FEMALE'
+      WHEN UPPER(self.Salutation_Gender) = 'OTHER'  THEN 'OTHER'
+    END
+  )
+) AS Salutation_Gender,
+  COALESCE(ecom.Account_Creation_Date, self.Account_Creation_Date) AS Account_Creation_Date,
+  COALESCE(ecom.Last_Activity_Date, self.Last_Activity_Date) AS Last_Activity_Date,
+  COALESCE(ecom.Last_Viewed_Date, self.Last_Viewed_Date) AS Last_Viewed_Date,
+  COALESCE(ecom.Last_Modified_Date, self.Last_Modified_Date) AS Last_Modified_Date,
+  COALESCE(ecom.consent_homephone_code, self.consent_homephone_code) AS consent_homephone_code,
+  COALESCE(ecom.consent_officephone_code, self.consent_officephone_code) AS consent_officephone_code,
+  COALESCE(ecom.consent_cellphone_code, self.consent_cellphone_code) AS consent_cellphone_code,
+  COALESCE(ecom.consent_email1_code, self.consent_email1_code) AS consent_email1_code,
+  COALESCE(ecom.consent_email2_code, self.consent_email2_code) AS consent_email2_code,
+  -- COALESCE(ecom.Contactability_Email, self.Contactability_Email) AS Contactability_Email,
+  -- COALESCE(ecom.Contactability_Phone, self.Contactability_Phone) AS Contactability_Phone,
+  -- COALESCE(ecom.Contactability_Print, self.Contactability_Print) AS Contactability_Print,
+  COALESCE(ecom.Date_Of_Acceptance, self.Date_Of_Acceptance) AS Date_Of_Acceptance,
+  COALESCE(ecom.Date_Of_Opt_In_Update, self.Date_Of_Opt_In_Update) AS Date_Of_Opt_In_Update,
+  COALESCE(ecom.Privacy_Policy_Signed, self.Privacy_Policy_Signed) AS Privacy_Policy_Signed,
+  COALESCE(ecom.Privacy_Policy_Acceptance, self.Privacy_Policy_Acceptance) AS Privacy_Policy_Acceptance,
+  COALESCE(ecom.Sales_Associate, self.Sales_Associate) AS Sales_Associate,
+  COALESCE(ecom.Master_Record_Id, self.Master_Record_Id) AS Master_Record_Id,
+  tech_golden_id,
+  -- COALESCE(ecom.tech_golden_id, self.tech_golden_id) AS tech_golden_id,
+  old_Prefered_Postal_Address,
+  -- COALESCE(ecom.Last_purchase_date, self.Last_purchase_date) AS purchase_date
+  CASE  WHEN self.Last_purchase_date IS NULL
+                  THEN ecom.Last_purchase_date
+                WHEN ecom.Last_purchase_date IS NULL
+                  THEN self.Last_purchase_date
+                WHEN self.Last_purchase_date > ecom.Last_purchase_date
+                  THEN self.Last_purchase_date
+                ELSE ecom.Last_purchase_date
+          END
+  AS last_update_date,
+  from sfcc_cutomers ecom
+
+  FULL JOIN
+    ${ref("INT_CUSTOMERS_SELF_Y2_FULL")}  self
+on     ecom.Sources_Source_Customer_Id = self.Sources_Source_Customer_Id 
+
+  left join dimensions.DI_SALES_ADVISOR sa
+on sa.sales_person_key = ifnull(ecom.Sales_Associate, self.Sales_Associate)

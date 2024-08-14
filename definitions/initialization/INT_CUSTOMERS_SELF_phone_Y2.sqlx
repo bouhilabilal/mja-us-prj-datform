@@ -1,0 +1,153 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_CUSTOMERS_SELF_Y2",
+    tags: ["dimensions", "CUSTOMERS","duplicate"]
+}
+
+  WITH cte_y2_sfcc_customers AS (
+  SELECT DISTINCT
+    Sources_Source_Customer_Id,
+    upper(email_value) as email_value,
+    CASE 
+      WHEN Phone_cell_phone IS NOT NULL THEN Phone_cell_phone
+      WHEN Phone_home_phone IS NOT NULL THEN Phone_home_phone
+      ELSE Phone_office_phone
+    END AS phone
+  FROM ${ref("INT_CUSTOMERS_Y2")}
+
+),
+cte_di_customers AS (
+SELECT
+    distinct Customer_Id,
+    source.Source_Customer_Id AS Source_Customer_Ids,
+    COALESCE(UPPER(email.value), '') AS Email_Values,
+    COALESCE(UPPER(phone.cell_phone), '') AS Cell_Phones
+  FROM `dimensions.DI_CUSTOMERS` dc
+  LEFT JOIN UNNEST(dc.Sources) AS source
+  LEFT JOIN UNNEST(dc.Email) AS email 
+  LEFT JOIN UNNEST(dc.Phone) AS phone 
+)
+,customerslist_ids as(
+SELECT  cte_di.Customer_Id
+FROM cte_di_customers cte_di
+inner join cte_y2_sfcc_customers cte_y2_sfcc
+ON cte_y2_sfcc.Sources_Source_Customer_Id =cte_di.Source_Customer_Ids
+
+
+),customerslist_emails as(
+SELECT  cte_di.Customer_Id
+FROM cte_di_customers cte_di
+inner join cte_y2_sfcc_customers cte_y2_sfcc
+ON cte_y2_sfcc.email_value = cte_di.Email_Values
+
+),customerslist_phone as(
+SELECT  cte_di.Customer_Id
+FROM cte_di_customers cte_di
+inner join cte_y2_sfcc_customers cte_y2_sfcc
+ON  cte_y2_sfcc.phone = cte_di.Cell_Phones
+
+)
+
+
+,custinsales as (
+SELECT DISTINCT Customer_Id
+ FROM dimensions.DI_CUSTOMERS ori
+  LEFT JOIN UNNEST(sources) AS Sources
+  inner join   ${ref("INT_SALES")} sales
+    on sales.source_customer_id = Sources.Source_Customer_Id
+)
+,custinINT as (
+SELECT DISTINCT Customer_Id
+ FROM dimensions.DI_CUSTOMERS ori
+  LEFT JOIN UNNEST(sources) AS Sources
+  inner join   cte_y2_sfcc_customers init_cust
+    on init_cust.Sources_Source_Customer_Id = Sources.Source_Customer_Id
+    where Sources.Source_Customer_Id is not null
+),customers_list as (
+
+  select distinct Customer_Id
+  from (
+    select Customer_Id from custinsales
+    union all 
+    select Customer_Id from customerslist_ids
+    union all 
+    select Customer_Id from customerslist_emails
+    union all 
+    select Customer_Id from customerslist_phone
+    union all 
+    select Customer_Id from custinINT
+    )
+)
+SELECT
+    Sources.Source_Id as Sources_Source_Id,
+  Sources.Source_Customer_Id as Sources_Source_Customer_Id,
+  Sources.Account_id as Sources_Account_id,
+  Sources.source_created_by_id as Sources_Created_By_Id,
+  Last_Name,
+  First_Name,
+  Middle_Name,
+  Email.main_email as Email_main_email,
+  Email.source_id as Email_source_id,
+  Email.value as Email_value,
+  Phone[SAFE_OFFSET(0)].main_phone AS Phone_main_phone,
+  Phone[SAFE_OFFSET(0)].source_id AS Phone_source_id,
+  Phone[SAFE_OFFSET(0)].cell_phone AS Phone_cell_phone,
+  Phone[SAFE_OFFSET(0)].home_phone AS Phone_home_phone,
+  Phone[SAFE_OFFSET(0)].office_phone AS Phone_office_phone,
+  CASE
+    WHEN Phone[SAFE_OFFSET(0)].cell_phone IS NULL THEN Phone[SAFE_OFFSET(0)].home_phone
+  ELSE
+  Phone[SAFE_OFFSET(0)].cell_phone
+END
+  AS phone,
+  ori.fictitious_customer,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].Address AS Prefered_Postal_Address_Address,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].ZipCode AS Prefered_Postal_Address_ZipCode,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].City AS Prefered_Postal_Address_City,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].State AS Prefered_Postal_Address_State,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].CountryId AS Prefered_Postal_Address_CountryId,
+  Prefered_Postal_Address[SAFE_OFFSET(0)].CountryName AS Prefered_Postal_Address_CountryName,
+  ori.Language,
+  ori.Nationality,
+  ori.Birthdate,
+  ori.Salutation,
+  ori.Salutation_Gender,
+  ori.Account_Creation_Date,
+  ori.Last_Activity_Date,
+  ori.Last_Modified_Date,
+  ori.Last_Viewed_Date,
+  ori.Sales_Associate,
+  ori.consent_homephone_code,
+  ori.consent_officephone_code,
+  ori.consent_cellphone_code,
+  ori.consent_email1_code,
+  ori.consent_email2_code,
+  -- ori.Contactable  ,
+  -- ori.Email   ,
+  -- ori.Phone     ,
+  -- ori.Print,
+  ori.Date_Of_Acceptance,
+  ori.Date_Of_Opt_In_Update,
+  ori.Privacy_Policy_Signed,
+  ori.Privacy_Policy_Acceptance,
+  ori.Master_Record_Id,
+  ori.Last_Order_Date as Last_purchase_date ,
+  ori.Customer_ID as tech_golden_id,
+  Prefered_Postal_Address AS old_Prefered_Postal_Address
+  
+
+ FROM dimensions.DI_CUSTOMERS ori
+   LEFT JOIN UNNEST(sources) AS Sources
+    LEFT JOIN UNNEST(Email) AS Email
+    -- inner join   ${ref("INT_SALES")}sales
+    -- on sales.source_customer_id = Sources.Source_Customer_Id
+    
+        -- WHERE Sources.Source_Customer_Id <> '' AND Sources.Source_Customer_Id IS NOT NULL
+        -- and  Sources.Source_Id = 'sfcc'
+  inner join customers_list cust_list
+  on ori.Customer_Id = cust_list.Customer_Id
+  WHERE Sources.Source_Customer_Id <> '' AND Sources.Source_Customer_Id IS NOT NULL
+        and  Sources.Source_Id = 'y2'
+
+

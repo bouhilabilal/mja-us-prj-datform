@@ -1,0 +1,36 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMER_INFO_SUMMARY",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+
+WITH
+  customer_sales AS (
+  SELECT
+    golden_id,
+    MIN(order_date) AS first_order_date,
+    MAX(order_date) AS last_order_date,
+    -- IF(COUNTIF(order_status = 'CANCELLED' or transaction_type = 'RETURN') = COUNT(*), TRUE, FALSE) AS prospect,
+    COUNT(DISTINCT IF(te_amount_discount_usd IS NULL, order_line_id, NULL)) AS full_price_orders,
+    COUNT(DISTINCT IF(te_amount_discount_usd IS NOT NULL, order_line_id, NULL)) AS discounted_orders,
+  FROM
+    
+    ${ref("INT_PRECALC_SALES_USD")}
+
+  GROUP BY
+    golden_id) 
+SELECT
+  golden_id,
+  first_order_date,
+  last_order_date,
+  full_price_orders,
+  discounted_orders,
+  -- prospect,
+  CASE
+        WHEN full_price_orders > 0 AND discounted_orders = 0 THEN 'Fullprice buyer'
+        WHEN full_price_orders > 0 AND discounted_orders > 0 THEN 'Mix buyer' 
+        ELSE 'Promo buyer'
+      END AS Type_of_buyer
+FROM
+  customer_sales

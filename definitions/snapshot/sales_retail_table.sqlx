@@ -1,0 +1,134 @@
+config {
+    type: "table",
+    schema: "snapshot",
+    name: "sales_retail_table",
+    tags: ["CUSTOMERS","gcp_to_klaviyo"],
+    dependencies: ["UPDATE_DI_CUSTOMERS_CONSENT_EMAIL"]
+
+    }
+
+WITH order_totals AS (
+  SELECT
+    Customer_Id,Sales_Order_Id,
+    SUM(ol.te_turnover) AS Total_order_amount
+  FROM
+    ${ref("FACT_SALES")}   fs,
+    UNNEST(fs.order_line) ol
+  GROUP BY
+     Customer_Id,Sales_Order_Id
+)
+, fs AS (
+   
+SELECT 
+    fs.Customer_Id,
+    fs.Sales_Order_Id,
+    fs.order_date,
+    src.Sales_Order_Id as Source_Sales_Order_Id,
+    src.Source_Id as Source_Source_Id,
+    fs.store_code,
+    ds.store_name,
+    ds.area_name AS store_region,
+    ds.country_name AS store_country,
+    ds.store_type,
+    ol.product_id AS Barcode_UPC,
+    dp.SKU,
+    dp.style,
+    dp.Product_Name,
+    dp.Report_Category,
+    dp.Report_Category_Detail,
+    dp.Category,
+    dp.class,
+    dp.subclass,
+    dp.Division,
+    dp.MJ_Division,
+    dp.Merch_Collection,
+    dp.Merch_Theme,
+    dp.Group,
+    dp.Color_Code,
+    dp.Color,
+    ol.order_line_id,
+    ol.quantity,
+    ol.te_turnover,
+    ol.te_amount_discount,
+    ol.discount_type,
+    ot.Total_order_amount,
+    ol.sales_advisor_id,
+    CURRENT_TIMESTAMP() AS Last_Export_Date,
+    FARM_FINGERPRINT(CONCAT(
+        IFNULL(fs.Customer_Id, ''),
+        IFNULL(fs.Sales_Order_Id, ''),
+        IFNULL(CAST(fs.order_date AS STRING), ''),
+        IFNULL(src.Sales_Order_Id, ''),
+        IFNULL(fs.store_code, ''),
+        IFNULL(ds.store_name, ''),
+        IFNULL(ds.area_name, ''),
+        IFNULL(ds.country_name, ''),
+        IFNULL(ds.store_type, ''),
+        IFNULL(ol.product_id, ''),
+        IFNULL(dp.SKU, ''),
+        IFNULL(dp.style, ''),
+        IFNULL(dp.Product_Name, ''),
+        IFNULL(dp.Report_Category, ''),
+        IFNULL(dp.Report_Category_Detail, ''),
+        IFNULL(dp.Category, ''),
+        IFNULL(dp.class, ''),
+        IFNULL(dp.subclass, ''),
+        IFNULL(dp.Division, ''),
+        IFNULL(dp.MJ_Division, ''),
+        IFNULL(dp.Merch_Collection, ''),
+        IFNULL(dp.Merch_Theme, ''),
+        IFNULL(dp.Group, ''),
+        IFNULL(dp.Color_Code, ''),
+        IFNULL(dp.Color, ''),
+        IFNULL(CAST(ol.quantity AS STRING), ''),
+        IFNULL(CAST(ol.te_turnover AS STRING), ''),
+        IFNULL(CAST(ol.te_amount_discount AS STRING), ''),
+        IFNULL(ol.discount_type, ''),
+        IFNULL(CAST(ot.Total_order_amount AS STRING), '')
+    )) AS Fingerprint
+FROM 
+     ${ref("FACT_SALES")}  fs
+    LEFT JOIN UNNEST(fs.order_line) ol
+    LEFT JOIN UNNEST(fs.sources) src
+    LEFT JOIN `dimensions.DI_STORES` ds ON fs.store_code = ds.store_code
+    LEFT JOIN `dimensions.DI_PRODUCTS` dp ON ol.product_id = dp.Barcode_UPC
+    LEFT JOIN order_totals ot ON fs.Customer_Id = ot.Customer_Id and ot.Sales_Order_Id = fs.Sales_Order_Id
+    where ol.transaction_type not in ('REFUND','RETURN')
+    and flag <> 1
+    and fs.Customer_Id is not null
+)
+select fs.* 
+FROM 
+       fs
+    LEFT JOIN 
+      `snapshot.reference_sales_table` rs 
+    ON fs.Sales_Order_Id = rs.Sales_Order_Id 
+      AND fs.Customer_Id = rs.Customer_Id 
+      AND fs.Barcode_UPC = rs.Barcode_UPC
+      AND fs.order_line_id = rs.order_line_id
+      AND fs.sales_advisor_id = rs.sales_advisor_id
+      AND fs.discount_type = rs.discount_type
+
+      
+    WHERE 
+      (rs.Sales_Order_Id IS NULL OR fs.Fingerprint != rs.Fingerprint)
+      AND fs.Source_Source_Id = 'y2'
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

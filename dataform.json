@@ -1,0 +1,12 @@
+{
+  "defaultSchema": "dataform",
+  "assertionSchema": "dataform_assertions",
+  "warehouse": "bigquery",
+  "defaultDatabase": "mja-us-prj-dpf-ing-01-dev",
+  "defaultLocation": "US",
+  "vars": {
+  "env":"dev",
+  "customers_typer" : "manual_files.Customer_Type"
+}
+}
+    

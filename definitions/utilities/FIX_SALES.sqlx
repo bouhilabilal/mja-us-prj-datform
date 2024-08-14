@@ -1,0 +1,74 @@
+
+
+IF NOT EXISTS (
+
+  SELECT table_id FROM facts.__TABLES__ WHERE table_id = "FACT_SALES"
+  
+  )
+  
+  THEN CREATE table facts.FACT_SALES (
+    
+    Customer_Id STRING,
+    Sales_Order_Id STRING,
+    sources ARRAY<STRUCT<
+      Source_Id STRING,
+      Sales_Order_Id STRING
+    >>,
+    invoice_id STRING,
+    source_customer_id STRING,
+    -- sales_advisor_id STRING,
+    store_code STRING,
+    currency_id STRING,
+    country_delivery_id STRING,
+    order_date DATE,
+    invoice_date DATE,
+    export_date TIMESTAMP,
+    cashier STRING,
+    order_status STRING,
+    shipping_status STRING,
+    financed_order BOOLEAN,
+    Billing_Address ARRAY<STRUCT<
+      Address STRING,
+      ZipCode STRING,
+      City STRING,
+      State STRING,
+      CountryID STRING,
+      Country_Name STRING,
+      Phone_Number STRING
+    >>,
+    Shipping_Address ARRAY<STRUCT<
+      Address STRING,
+      ZipCode STRING,
+      City STRING,
+      State STRING,
+      CountryID STRING,
+      Country_Name STRING,
+      Phone_Number STRING
+    >>,
+    -- transaction_type STRING,
+    order_line ARRAY<STRUCT<
+      order_line_id STRING,
+      sales_advisor_id STRING,
+      product_id STRING,
+      transaction_type STRING,
+      return_reason_code string,
+      product_markdown BOOLEAN,
+      discount_type STRING,
+      quantity INT64,
+      tax_rate FLOAT64,
+      te_turnover FLOAT64,
+      te_turnover_full_price FLOAT64,
+      ti_turnover FLOAT64,
+      ti_turnover_full_price FLOAT64,
+      te_amount_discount FLOAT64,
+      te_amount_markdown FLOAT64,
+      ti_amount_discount FLOAT64,
+      ti_amount_markdown FLOAT64,
+      return_flag INT64
+    >>,
+    flag INT64,
+    sales_order INT64
+  
+  );
+  
+  END IF;

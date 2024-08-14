@@ -1,0 +1,125 @@
+config {
+    type: "incremental",
+    schema: "datalake",
+    name: "DL_CUSTOMERS_SFCC_GUEST",
+    tags: ["datalake"]
+
+}
+
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+
+
+with SA_with_hash as 
+(SELECT
+*,
+TO_HEX(MD5(CONCAT(
+    COALESCE(cast(Sources_Source_Id as string), ''), 
+COALESCE(cast(Sources_Source_Customer_Id as string), ''), 
+COALESCE(cast(Sources_Account_id as string), ''), 
+COALESCE(cast(Sources_Created_By_Id as string), ''), 
+COALESCE(cast(last_name as string), ''), 
+COALESCE(cast(first_name as string), ''), 
+COALESCE(cast(middle_Name as string), ''), 
+COALESCE(cast(Email_main_email as string), ''), 
+COALESCE(cast(Email_source_id as string), ''), 
+COALESCE(cast(email_value as string), ''), 
+COALESCE(cast(phone_main_phone as string), ''), 
+COALESCE(cast(Phone_source_id as string), ''), 
+COALESCE(cast(phone_cell_phone as string), ''), 
+COALESCE(cast(Phone_home_phone as string), ''), 
+COALESCE(cast(Phone_office_phone as string), ''), 
+COALESCE(cast(fictitious_customer as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_Address as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_ZipCode as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_City as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_State as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_CountryId as string), ''), 
+COALESCE(cast(Prefered_Postal_Address_CountryName as string), ''), 
+COALESCE(cast(LANGUAGE as string), ''), 
+COALESCE(cast(Nationality as string), ''), 
+COALESCE(cast(birthdate as string), ''), 
+COALESCE(cast(Salutation as string), ''), 
+COALESCE(cast(Salutation_Gender as string), ''), 
+COALESCE(cast(Account_Creation_Date as string), ''), 
+COALESCE(cast(Last_Activity_Date as string), ''), 
+COALESCE(cast(Last_Modified_Date as string), ''), 
+COALESCE(cast(Last_Viewed_Date as string), ''), 
+COALESCE(cast(consent_homephone_code as string), ''), 
+COALESCE(cast(consent_officephone_code as string), ''), 
+COALESCE(cast(consent_cellphone_code as string), ''), 
+COALESCE(cast(consent_email1_code as string), ''), 
+COALESCE(cast(consent_email2_code as string), ''), 
+-- COALESCE(cast(Contactability_Email as string), ''), 
+-- COALESCE(cast(Contactability_Phone as string), ''), 
+-- COALESCE(cast(Contactability_Print as string), ''), 
+COALESCE(cast(Date_Of_Acceptance as string), ''), 
+COALESCE(cast(Date_Of_Opt_In_Update as string), ''), 
+COALESCE(cast(Privacy_Policy_Signed as string), ''), 
+COALESCE(cast(Privacy_Policy_Acceptance as string), ''), 
+COALESCE(cast(Sales_Associate as string), ''), 
+COALESCE(cast(Master_Record_Id as string), '')
+  ))) AS row_hash
+FROM
+  mja_us_bqd_dpf_sfcc_01_${env_prefix}.SFCC_CUSTOMERS_GUEST
+    -- init_temp_tables.customers_sfcc_guest
+
+  ) 
+  
+  select 
+    ori.Sources_Source_Id,
+    ori.Sources_Source_Customer_Id,
+    ori.Sources_Account_id,
+    ori.Sources_Created_By_Id,
+    ori.last_name,
+    ori.first_name,
+    ori.middle_Name,
+    ori.Email_main_email,
+    ori.Email_source_id,
+    ori.email_value,
+    ori.phone_main_phone,
+    ori.Phone_source_id,
+    ori.phone_cell_phone,
+    ori.Phone_home_phone,
+    ori.Phone_office_phone,
+    ori.fictitious_customer,
+    ori.Prefered_Postal_Address_Address,
+    ori.Prefered_Postal_Address_ZipCode,
+    ori.Prefered_Postal_Address_City,
+    ori.Prefered_Postal_Address_State,
+    ori.Prefered_Postal_Address_CountryId,
+    ori.Prefered_Postal_Address_CountryName,
+    ori.LANGUAGE,
+    ori.Nationality,
+    ori.birthdate,
+    ori.Salutation,
+    ori.Salutation_Gender,
+    ori.Account_Creation_Date,
+    ori.Last_Activity_Date,
+    ori.Last_Modified_Date,
+    ori.Last_Viewed_Date,
+    ori.consent_homephone_code,
+    ori.consent_officephone_code,
+    ori.consent_cellphone_code,
+    ori.consent_email1_code,
+    ori.consent_email2_code,
+    -- ori.Contactability_Email,
+    -- ori.Contactability_Phone,
+    -- ori.Contactability_Print,
+    ori.Date_Of_Acceptance,
+    ori.Date_Of_Opt_In_Update,
+    ori.Privacy_Policy_Signed,
+    ori.Privacy_Policy_Acceptance,
+    ori.Sales_Associate,
+    ori.Master_Record_Id,
+    ori.row_hash
+  from 
+    SA_with_hash ori
+  
+  ${when(incremental(), `
+    LEFT JOIN ${self()} destination on cast (destination.Sources_Source_Customer_Id as string ) = ori.Sources_Source_Customer_Id
+    WHERE ifnull(destination.row_hash,'') <> ori.row_hash
+`) }

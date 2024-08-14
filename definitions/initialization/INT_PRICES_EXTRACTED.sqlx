@@ -1,0 +1,21 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_PRICES",
+    tags: ["dimensions", "initialization","PRICES"]
+}
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+SELECT
+price_id,
+price_type,
+price_value,
+store_type,
+product_color_id,
+currency_code,
+FROM
+mja_us_bqd_dpf_anp_01_${env_prefix}.ANP_PRICES
+  

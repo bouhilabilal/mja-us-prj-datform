@@ -1,0 +1,80 @@
+config {
+    type: "incremental",
+    schema: "dimensions",
+    name: "DI_CUSTOMERS_MAPPING",
+    tags: ["dimensions", "CUSTOMERS", "calculated","cust_without_dudup"],
+    uniqueKey: ["Customer_Id"]
+}
+
+
+WITH
+  mapping AS (
+  
+  SELECT
+    CAST (Customer_Id AS string) AS Customer_Id,
+    -- ARRAY_AGG(DISTINCT
+    -- IF
+    --   (Source_Id IS NOT NULL
+    --     AND Source_Customer_Id IS NOT NULL
+    --     AND Source_Id = 'y2', Source_Customer_Id, '')) AS y2_id,
+    -- ARRAY_AGG(DISTINCT
+    -- IF
+    --   (Source_Id IS NOT NULL
+    --     AND Source_Customer_Id IS NOT NULL
+    --     AND Source_Id = 'sfcc', Source_Customer_Id, '')) AS sfcc_id,
+  FROM
+    ${ref("DI_CUSTOMERS")} customer,
+    UNNEST(sources)
+  GROUP BY
+    Customer_Id ),
+  SA_with_hash AS (
+  SELECT
+    customer.Customer_Id,
+    -- y2_id,
+    -- sfcc_id,
+    IFNULL(highest_segment, '') as highest_segment,
+    IFNULL(date_of_highest_segment, CURRENT_DATE()) as date_of_highest_segment,
+    IFNULL(current_segment, '') as current_segment,
+    -- date_of_current_segment,
+    IFNULL(previous_rfm_segment, '') as previous_rfm_segment,
+    IFNULL(date_of_rfm, null) as date_of_rfm,
+
+    -- date_of_previous_rfm_segment,
+    age,
+    TO_HEX(MD5(CONCAT( 
+      COALESCE(cast (customer.Customer_Id as string), ''), 
+      -- COALESCE(TO_JSON_STRING(y2_id ), ''), 
+      -- COALESCE(TO_JSON_STRING(sfcc_id), ''), 
+      COALESCE(cast (highest_segment as string), ''), 
+      COALESCE(cast (date_of_highest_segment as string), ''), 
+      COALESCE(cast (current_segment as string), ''), 
+      COALESCE(cast (previous_rfm_segment as string), ''),
+       COALESCE(cast (date_of_rfm as string), ''), 
+      COALESCE(cast (age as string), '') 
+      ))) AS MAPPING_hash
+  FROM
+    mapping
+  left JOIN 
+      ${ref("DI_CUSTOMERS")} customer
+  ON
+    customer.Customer_Id = mapping.Customer_Id )
+SELECT
+
+  ori.Customer_Id,
+  -- ori.y2_id,
+  -- ori.sfcc_id,
+  ori.highest_segment,
+  ori.date_of_highest_segment,
+  ori.current_segment,
+  ori.previous_rfm_segment,
+  ori.date_of_rfm,
+  ori.age,
+  ori.MAPPING_hash
+FROM
+  SA_with_hash ori
+  ${
+      when(incremental(), `
+        LEFT JOIN ${self()} destination on cast (destination.Customer_Id as string ) = ori.Customer_Id
+        WHERE ifnull(destination.MAPPING_hash,'') <> ori.MAPPING_hash
+    `)
+  }

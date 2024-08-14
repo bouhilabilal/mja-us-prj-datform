@@ -1,0 +1,70 @@
+config {
+  type: "incremental",
+  schema: "dimensions",
+  name: "DI_SALES_ADVISOR",
+  uniqueKey: ["unique_key"],
+  tags: ["dimensions", "SALES_ADVISOR"]
+}
+
+
+with SA_with_hash as 
+(SELECT
+distinct
+*,
+ CONCAT(
+    COALESCE(sales_person_key, ''), 
+    COALESCE(store_code, ''), 
+    COALESCE(last_name, ''), 
+    COALESCE(first_name, ''), 
+    COALESCE(email, ''), 
+    COALESCE(telephone, ''), 
+    COALESCE(sales_person_position, '')) as unique_key,
+TO_HEX(MD5(CONCAT(
+    COALESCE(sales_person_key, ''), 
+    COALESCE(store_code, ''), 
+    COALESCE(last_name, ''), 
+    COALESCE(first_name, ''), 
+    COALESCE(email, ''), 
+    COALESCE(telephone, ''), 
+    COALESCE(sales_person_position, '')
+  ))) AS row_hash
+FROM
+  ${ref("INT_SALES_ADVISOR")}) 
+  
+  select
+  distinct 
+  ori.sales_person_key, 
+  ori.store_code, 
+  ori.last_name, 
+  ori.first_name, 
+  ori.email, 
+  ori.telephone, 
+  ori.sales_person_position,
+  ori.unique_key,
+
+  ori.row_hash
+  from 
+  SA_with_hash ori
+  
+  ${when(incremental(), `
+    LEFT JOIN ${self()} destination on cast (destination.sales_person_key as string ) = ori.sales_person_key
+    WHERE ifnull(destination.row_hash,'') <> ori.row_hash
+`) }
+-- config {
+--   type: "table",
+--   schema: "dimensions",
+--   name: "DI_SALES_ADVISOR",
+--     tags: ["dimensions", "SALES_ADVISOR"]
+-- }
+
+--   select 
+--   ori.sales_person_key, 
+--   ori.store_code, 
+--   ori.last_name, 
+--   ori.first_name, 
+--   ori.email, 
+--   ori.telephone, 
+--   ori.sales_person_position,
+--   from 
+-- ${ref("INT_SALES_ADVISOR")} ori
+

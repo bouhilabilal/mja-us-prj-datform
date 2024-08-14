@@ -1,0 +1,86 @@
+config {
+    type: "table",
+    schema: "snapshot",
+    name: "customers_retail_table",
+    tags: ["CUSTOMERS","gcp_to_klaviyo"],
+    dependencies: ["UPDATE_DI_CUSTOMERS_CONSENT_EMAIL"]
+}
+
+with customers as (
+    SELECT 
+        distinct
+        Customer_Id,
+        src.Source_Id as Source_Source_Id,
+        First_Name,
+        Last_Name,
+        e.main_email,
+        e.value,
+        e.consent,
+        e.update_consent_date,
+        e.valide,
+        -- Phone[SAFE_OFFSET(0)].cell_phone as phone,
+        Prefered_Postal_Address[SAFE_OFFSET(0)].city,
+        Prefered_Postal_Address[SAFE_OFFSET(0)].state,
+        Prefered_Postal_Address[SAFE_OFFSET(0)].CountryName,
+        Prefered_Postal_Address[SAFE_OFFSET(0)].ZipCode,
+        Salutation_Gender,
+        Birthdate,
+        IF(prospect = true, 'Prospect', 'Customer') AS Profile_Status,
+        customer_attrition,
+        customer_segmentation,
+        Customer_Type,
+        Main_Store_Id,
+        stores.store_name,
+        stores.country_name,
+        stores.area_name,
+        stores.District,
+        stores.store_type,
+        Type_of_buyer,
+        IF(Local_Client = true, 'LOCAL', 'Tourist') AS Profile_Category,
+        FARM_FINGERPRINT(CONCAT(
+            IFNULL(First_Name, ''),
+            IFNULL(Last_Name, ''),
+            IFNULL(e.main_email, true),
+            IFNULL(e.value, ''),
+            IFNULL(e.consent, ''),
+            IFNULL(e.update_consent_date, DATE '1900-01-01'),
+            IFNULL(e.valide, false),
+            IFNULL(Phone[SAFE_OFFSET(0)].cell_phone, ''),
+            IFNULL(Prefered_Postal_Address[SAFE_OFFSET(0)].city, ''),
+            IFNULL(Prefered_Postal_Address[SAFE_OFFSET(0)].state, ''),
+            IFNULL(Prefered_Postal_Address[SAFE_OFFSET(0)].CountryName, ''),
+            IFNULL(Prefered_Postal_Address[SAFE_OFFSET(0)].ZipCode, ''),
+            IFNULL(Salutation_Gender, ''),
+            IFNULL(CAST(Birthdate AS STRING), ''),
+            IF(prospect = true, 'Prospect', 'Customer'),
+            IFNULL(customer_attrition, ''),
+            IFNULL(customer_segmentation, ''),
+            IFNULL(Customer_Type, ''),
+            IFNULL(Main_Store_Id, ''),
+            IFNULL(stores.store_name, ''),
+            IFNULL(stores.country_name, ''),
+            IFNULL(stores.area_name, ''),
+            IFNULL(stores.District, ''),
+            IFNULL(stores.store_type, ''),
+            IFNULL(Type_of_buyer, ''),
+            IF(Local_Client = true, 'LOCAL', 'Tourist')
+        )) AS Fingerprint
+    FROM 
+        ${ref("DI_CUSTOMERS")}  customer_data
+        left join unnest(sources) src
+        left join unnest(email) e
+    LEFT JOIN 
+        `dimensions.DI_STORES` stores ON customer_data.Main_Store_Id = stores.store_code
+    WHERE 
+        e.value IS NOT NULL
+        and consent_email1_code in ('SUBSCRIBED')
+    )
+
+select customers.* from customers
+LEFT JOIN 
+      `snapshot.reference_customers_table` ref
+    ON 
+      customers.Customer_Id = ref.Customer_Id
+    WHERE 
+      (ref.Customer_Id IS NULL OR customers.Fingerprint != ref.Fingerprint)
+      AND Source_Source_Id = 'y2'

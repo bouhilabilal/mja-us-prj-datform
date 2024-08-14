@@ -1,0 +1,409 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CUSTOMER_METRICS_PREP",
+    tags: ["dimensions", "CUSTOMERS","cust_without_dudup"]
+}
+js {
+    const {
+        ApplayRegEx
+    } = require("includes/cleaning_functions/js_email_regex.js");
+}
+WITH distinct_ids AS (
+  SELECT 
+    DISTINCT Golden_ID, 
+    --'y2' AS Source_Id, 
+    Sources_Source_Id AS Source_Id,
+    Sources_Account_id,
+    pos_id AS Source_Customer_Id,
+    pos_created_by_id AS source_created_by_id
+  FROM ${ref("WRK_CUSTOMER_GOLDEN_ID")}
+  WHERE pos_id IS NOT NULL AND pos_id <> ''
+  UNION ALL
+  SELECT 
+    DISTINCT Golden_ID, 
+    -- 'sfcc' AS Source_Id,
+    Sources_Source_Id AS Source_Id,
+    Sources_Account_id,
+    ecom_id AS Source_Customer_Id,
+    ecom_created_by_id AS source_created_by_id
+  FROM ${ref("WRK_CUSTOMER_GOLDEN_ID")}
+  WHERE ecom_id IS NOT NULL AND ecom_id <> ''
+),
+distinct_golden_id AS (
+  SELECT DISTINCT 
+    Golden_ID,
+    last_name,
+    first_name,
+    Middle_Name,
+    Email_main_email,
+    Email_source_id,
+    email,
+    phone_main_phone,
+    Phone_source_id,
+    phone,
+    Phone_home_phone,
+    Phone_office_phone,
+    fictitious_customer,
+    Prefered_Postal_Address_Address,
+    Prefered_Postal_Address_ZipCode,
+    Prefered_Postal_Address_City,
+    Prefered_Postal_Address_State,
+    Prefered_Postal_Address_CountryId,
+    Prefered_Postal_Address_CountryName,
+    LANGUAGE,
+    Nationality,
+    birthdate,
+    Age,
+    Salutation,
+    Salutation_Gender,
+    Account_Creation_Date,
+    Last_Activity_Date,
+    Last_Modified_Date,
+    Last_Viewed_Date,
+    consent_homephone_code,
+    consent_officephone_code,
+    consent_cellphone_code,
+    consent_email1_code,
+    consent_email2_code,
+    Customer_Type,
+    Contactability_Email,
+    Contactability_Phone,
+    Contactability_Print,
+    Date_Of_Acceptance,
+    Date_Of_Opt_In_Update,
+    Privacy_Policy_Signed,
+    Privacy_Policy_Acceptance,
+    Sales_Associate,
+    Master_Record_Id
+  FROM ${ref("WRK_CUSTOMER_GOLDEN_ID")}
+
+),
+SampleData AS (
+  SELECT
+    sd.Golden_ID AS Customer_Id,
+    ARRAY_AGG( 
+      STRUCT(d_id.Source_Id, d_id.Source_Customer_Id,
+        d_id.Sources_Account_id AS Account_id,
+        d_id.source_created_by_id) 
+      ORDER BY d_id.Sources_Account_id, d_id.source_created_by_id desc) AS sources, 
+    MAX(sd.last_name) AS last_name,
+    MAX(sd.first_name) AS first_name,
+    MAX(sd.Middle_Name) AS Middle_Name,
+    ARRAY_AGG(STRUCT(sd.Email_main_email AS main_email,
+      sd.Email_source_id AS source_id,
+      sd.email AS value,
+      sd.consent_email1_code as consent,
+      Last_Modified_Date as update_consent_date,
+      CASE WHEN  ${ApplayRegEx("sd.email")} IS NULL THEN False else True END as valide )
+      ORDER BY sd.Email_main_email, sd.Email_source_id, sd.email desc) AS Email,
+    ARRAY_AGG(STRUCT(sd.phone_main_phone AS main_phone,
+      sd.Phone_source_id AS source_id,
+      sd.phone AS cell_phone,
+      sd.Phone_home_phone AS home_phone,
+      sd.Phone_office_phone AS office_phone)
+      ORDER BY sd.phone_main_phone, sd.Phone_source_id, sd.phone, sd.Phone_home_phone, sd.Phone_office_phone desc) AS Phone,
+    MAX(sd.fictitious_customer) AS fictitious_customer,
+    ARRAY_AGG(STRUCT(sd.Prefered_Postal_Address_Address AS Address,
+      sd.Prefered_Postal_Address_ZipCode AS ZipCode,
+      sd.Prefered_Postal_Address_City AS City,
+      sd.Prefered_Postal_Address_State AS State,
+      sd.Prefered_Postal_Address_CountryId AS CountryId,
+      sd.Prefered_Postal_Address_CountryName AS CountryName)
+      ORDER BY sd.Prefered_Postal_Address_Address,
+              sd.Prefered_Postal_Address_ZipCode,
+              sd.Prefered_Postal_Address_City,
+              sd.Prefered_Postal_Address_State,
+              sd.Prefered_Postal_Address_CountryId,
+              sd.Prefered_Postal_Address_CountryName desc) AS Prefered_Postal_Address,
+    MAX(sd.LANGUAGE) AS LANGUAGE,
+    MAX(sd.Nationality) AS Nationality,
+    MAX(sd.birthdate) AS birthdate,
+    MAX(sd.Age) AS Age,
+    MAX(sd.Salutation) AS Salutation,
+    MAX(sd.Salutation_Gender) AS Salutation_Gender,
+    MAX(sd.Account_Creation_Date) AS Account_Creation_Date,
+    MAX(sd.Last_Activity_Date) AS Last_Activity_Date,
+    MAX(sd.Last_Modified_Date) AS Last_Modified_Date,
+    MAX(sd.Last_Viewed_Date) AS Last_Viewed_Date,
+    GREATEST(
+      COALESCE(MAX(CAST(sd.Last_Modified_Date AS TIMESTAMP)), TIMESTAMP '1970-01-01'),
+      COALESCE(MAX(CAST(sd.Last_Viewed_Date AS TIMESTAMP)), TIMESTAMP '1970-01-01'),
+      COALESCE(MAX(CAST(sd.Account_Creation_Date AS TIMESTAMP)), TIMESTAMP '1970-01-01')
+    ) AS Last_Interaction_Date,
+    MAX(sd.consent_homephone_code) AS consent_homephone_code,
+    MAX(sd.consent_officephone_code) AS consent_officephone_code,
+    MAX(sd.consent_cellphone_code) AS consent_cellphone_code,
+    MAX(sd.consent_email1_code) AS consent_email1_code,
+    MAX(sd.consent_email2_code) AS consent_email2_code,
+    MAX(sd.Customer_Type) AS Customer_Type,
+    ARRAY_AGG(STRUCT(
+      CASE
+        WHEN sd.Contactability_Email = TRUE OR sd.Contactability_Phone = TRUE OR sd.Contactability_Print = TRUE THEN TRUE
+        ELSE FALSE
+      END AS Contactable,
+      sd.Contactability_Email AS Email,
+      sd.Contactability_Phone AS Phone,
+      sd.Contactability_Print AS Print)
+      ORDER BY sd.Contactability_Email,
+              sd.Contactability_Phone,
+              sd.Contactability_Print) AS Contactability,
+    MAX(sd.Date_Of_Acceptance) AS Date_Of_Acceptance,
+    MAX(sd.Date_Of_Opt_In_Update) AS Date_Of_Opt_In_Update,
+    MAX(sd.Privacy_Policy_Signed) AS Privacy_Policy_Signed,
+    MAX(sd.Privacy_Policy_Acceptance) AS Privacy_Policy_Acceptance,
+    MAX(sd.Sales_Associate) AS Sales_Associate,
+    MAX(sd.Master_Record_Id) AS Master_Record_Id
+  FROM distinct_golden_id sd
+  LEFT JOIN distinct_ids d_id
+  ON sd.Golden_ID = d_id.Golden_ID
+  GROUP BY
+    sd.Golden_ID
+),
+uniquesources as (
+  select distinct Customer_Id,src.* from 
+  SampleData
+  left join unnest (sources) as src
+),
+finalsources as (
+  select Customer_Id,
+  ARRAY_AGG( 
+      STRUCT(Source_Id, Source_Customer_Id,
+        Account_id,
+        source_created_by_id) 
+      ORDER BY Account_id, source_created_by_id) AS sources, 
+      from uniquesources
+      group by Customer_Id
+)
+,
+-- uniqueemail as (
+--   select distinct Customer_Id,src.* from 
+--   SampleData
+--   left join unnest (Email) as src
+-- ),
+-- finalemail as (
+--   select Customer_Id,
+--   ARRAY_AGG(STRUCT(main_email,
+--       source_id,
+--       value)
+--       ORDER BY main_email, source_id, value) AS Email,
+--       from uniqueemail
+--       group by Customer_Id
+-- ),
+-- uniqueemail AS (
+--   SELECT DISTINCT Customer_Id, src.* 
+--   FROM SampleData
+--   LEFT JOIN UNNEST(Email) AS src
+-- ),
+-- ranked_emails AS (
+--   SELECT 
+--     Customer_Id,
+--     main_email,
+--     source_id,
+--     value,
+--     consent,
+--     update_consent_date,
+--     valide,
+--     ROW_NUMBER() OVER (
+--       PARTITION BY Customer_Id, value 
+--       ORDER BY update_consent_date DESC
+--     ) AS rn
+--   FROM uniqueemail
+-- ),
+-- finalemail AS (
+--   SELECT 
+--     Customer_Id,
+--     ARRAY_AGG(
+--       STRUCT(
+--         main_email,
+--         source_id,
+--         value,
+--         consent,
+--         update_consent_date,
+--         valide
+--       )
+--       ORDER BY main_email, source_id, value
+--     ) AS Email
+--   FROM ranked_emails
+--   WHERE rn = 1
+--   GROUP BY Customer_Id
+-- ),
+uniqueemail AS (
+  SELECT DISTINCT Customer_Id, src.* 
+  FROM SampleData
+  LEFT JOIN UNNEST(Email) AS src
+),
+ranked_emails AS (
+  SELECT 
+    Customer_Id,
+    source_id,
+    value,
+    consent,
+    update_consent_date,
+    valide,
+    ROW_NUMBER() OVER (
+      PARTITION BY Customer_Id
+      ORDER BY update_consent_date DESC, valide DESC
+    ) AS rn,
+    CASE 
+      WHEN ROW_NUMBER() OVER (
+        PARTITION BY Customer_Id
+        ORDER BY update_consent_date DESC, valide DESC
+      ) = 1 AND valide = true THEN true
+      ELSE false
+    END AS main_email
+  FROM uniqueemail
+),
+finalemail AS (
+  SELECT 
+    Customer_Id,
+    ARRAY_AGG(
+      STRUCT(
+        main_email,
+        source_id,
+        value,
+        consent,
+        update_consent_date,
+        valide
+      )
+      ORDER BY main_email DESC, update_consent_date DESC, source_id, value
+    ) AS Email
+  FROM ranked_emails
+  WHERE rn = 1
+  GROUP BY Customer_Id
+),
+uniquePhone as (
+  select distinct Customer_Id,src.* from 
+  SampleData
+  left join unnest (Phone) as src
+),
+finalePhone as (
+  select Customer_Id,
+  ARRAY_AGG(STRUCT(main_phone,
+      source_id,
+      cell_phone,
+      home_phone,
+      office_phone)
+      ORDER BY main_phone, source_id, cell_phone, home_phone, office_phone) AS Phone,
+      from uniquePhone
+      group by Customer_Id
+),
+uniquePrefered_Postal_Address as (
+  select distinct Customer_Id,src.* from 
+  SampleData
+  left join unnest (Prefered_Postal_Address) as src
+),
+finalePrefered_Postal_Address as (
+  select Customer_Id,
+  ARRAY_AGG(STRUCT( Address,
+      ZipCode,
+      City,
+      State,
+     CountryId,
+      CountryName)
+      ORDER BY Address,
+              ZipCode,
+              City,
+              State,
+              CountryId,
+              CountryName) AS Prefered_Postal_Address,
+      from uniquePrefered_Postal_Address
+      group by Customer_Id
+),
+uniqueContactability as (
+  select distinct Customer_Id,src.* from 
+  SampleData
+  left join unnest (Contactability) as src
+),
+finaleContactability as (
+  select Customer_Id,
+  ARRAY_AGG(STRUCT(
+      Contactable,
+      Email,
+      Phone,
+      Print)
+      ORDER BY Email,
+              Phone,
+              Print) AS Contactability,
+      from uniqueContactability
+      group by Customer_Id
+),
+all_data as (
+  SELECT
+  distinct Customer_Id,
+  last_name,
+  first_name,
+  Middle_Name,
+  fictitious_customer,
+  LANGUAGE,
+  Nationality,
+  birthdate,
+  Age,
+  Salutation,
+  Salutation_Gender,
+  Account_Creation_Date,
+  Last_Activity_Date,
+  Last_Interaction_Date,
+  Customer_Type,
+  consent_homephone_code,
+  consent_officephone_code,
+  consent_cellphone_code,
+  consent_email1_code,
+  consent_email2_code,
+  Date_Of_Acceptance,
+  Date_Of_Opt_In_Update,
+  Privacy_Policy_Signed,
+  Privacy_Policy_Acceptance,
+  Sales_Associate,
+  Master_Record_Id,
+  Last_Modified_Date,
+  Last_Viewed_Date,
+FROM SampleData
+)
+SELECT
+  SampleData.Customer_Id,
+  finalsources.sources,
+  last_name,
+  first_name,
+  Middle_Name,
+  finalemail.Email,
+  finalePhone.Phone,
+  fictitious_customer,
+  finalePrefered_Postal_Address.Prefered_Postal_Address,
+  LANGUAGE,
+  Nationality,
+  birthdate,
+  Age,
+  Salutation,
+  Salutation_Gender,
+  Account_Creation_Date,
+  Last_Activity_Date,
+  Last_Interaction_Date,
+  Customer_Type,
+  finaleContactability.Contactability,
+  consent_homephone_code,
+  consent_officephone_code,
+  consent_cellphone_code,
+  consent_email1_code,
+  consent_email2_code,
+  Date_Of_Acceptance,
+  Date_Of_Opt_In_Update,
+  Privacy_Policy_Signed,
+  Privacy_Policy_Acceptance,
+  Sales_Associate,
+  Master_Record_Id,
+  Last_Modified_Date,
+   Last_Viewed_Date,
+FROM all_data as SampleData
+left join finalsources
+on SampleData.Customer_Id = finalsources.Customer_Id
+left join finalemail
+on SampleData.Customer_Id = finalemail.Customer_Id
+left join finalePrefered_Postal_Address
+on SampleData.Customer_Id = finalePrefered_Postal_Address.Customer_Id
+left join finaleContactability
+on SampleData.Customer_Id = finaleContactability.Customer_Id
+
+left join finalePhone
+on SampleData.Customer_Id = finalePhone.Customer_Id
+

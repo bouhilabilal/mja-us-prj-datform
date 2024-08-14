@@ -1,0 +1,419 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "FIX_MISSING_IDS",
+    tags: ["dimensions", "CUSTOMERS","MISSING"]
+} 
+WITH IDs_IN_ECOM as (
+
+  SELECT distinct full_id, ecom_id as list_ids, 'ecom_id' as srource from ${ref("WRK_CREATE_TEMP_ID")}
+  where ecom_id is not null
+
+) ,
+ IDs_IN_POS as (
+
+  SELECT distinct full_id, pos_id  as list_ids, 'pos_id' as srource from ${ref("WRK_CREATE_TEMP_ID")}
+  where pos_id is not null
+
+
+) ,
+FullJoinsIDs AS (
+  SELECT distinct full_id, pos_id, ecom_id, last_name, first_name, email, phone
+  FROM ${ref("WRK_CUSTOMER_JOIN")}
+  where pos_id not in (select distinct list_ids from IDs_IN_POS)
+  OR ecom_id not in (select distinct list_ids from IDs_IN_ECOM)
+  
+
+), Identification AS (
+  SELECT
+    full_id,
+    pos_id,
+    ecom_id,
+    last_name,
+    first_name,
+    email,
+    phone,
+    MIN(full_id) OVER (PARTITION BY email) AS email_min_id,
+    MIN(full_id) OVER (PARTITION BY phone) AS phone_min_id
+  FROM FullJoinsIDs
+  WHERE email IS NOT NULL OR phone IS NOT NULL
+  order by full_id
+),
+
+MinimizedIDs AS (
+  SELECT
+    full_id,
+    pos_id,
+    ecom_id,
+    last_name,
+    first_name,
+    email,
+    phone,
+    COALESCE(pos_id, ecom_id) AS new_full_id
+  FROM Identification
+  order by full_id
+
+),
+
+-- Include customers with no email or phone, treated as unique
+CompleteIDs AS (
+  SELECT 
+    new_full_id AS full_id,
+    pos_id,
+    ecom_id,
+    last_name,
+    first_name,
+    email,
+    phone
+  FROM MinimizedIDs
+  UNION ALL
+  SELECT 
+    full_id,
+    pos_id,
+    ecom_id,
+    last_name,
+    first_name,
+    email,
+    phone
+  FROM FullJoinsIDs
+  WHERE email IS NULL AND phone IS NULL
+),
+
+-- Filter WRK_CREATE_TEMP_ID for Lola Roberts
+TempIDFiltered AS (
+  SELECT DISTINCT
+  temp_id,
+  full_id, 
+  pos_id, 
+  ecom_id, 
+  last_name, 
+  first_name, 
+  email, 
+  phone
+  FROM
+ ${ref("WRK_CREATE_TEMP_ID")}
+
+),
+FixFullIds as 
+(SELECT 
+temp_id,
+    COALESCE(c.full_id, t.full_id) AS full_id,  -- Prefer the full_id from TempIDFiltered if available
+    c.pos_id,
+    c.ecom_id,
+    c.last_name,
+    c.first_name,
+    c.email,
+    c.phone
+FROM TempIDFiltered c
+ full outer JOIN CompleteIDs t
+ON c.last_name = t.last_name 
+    AND c.first_name = t.first_name
+    AND c.email IS NOT NULL AND  c.phone IS NOT NULL 
+    AND (
+        (c.email = t.email)  -- Matching emails 
+        OR 
+        (c.phone = t.phone)  -- Matching phones 
+    )
+) ,
+missing_clients AS (
+  SELECT *
+  FROM TempIDFiltered
+  WHERE full_id NOT IN (SELECT DISTINCT full_id FROM FixFullIds)
+),
+FullClients as 
+(SELECT * FROM FixFullIds
+UNION ALL
+SELECT * FROM missing_clients) 
+,max_temp AS (
+  SELECT MAX(temp_id) AS max_temp_id
+  FROM FullClients
+),
+assign_temp_id_unnested AS (
+  SELECT
+    DENSE_RANK() OVER (ORDER BY full_id) + m.max_temp_id AS new_temp_id,
+    fc.temp_id,
+    fc.full_id,
+    fc.pos_id,
+    fc.ecom_id,
+    fc.last_name,
+    fc.first_name,
+    fc.email,
+    fc.phone
+  FROM
+    FullClients fc
+  CROSS JOIN max_temp m
+  ORDER BY
+  full_id, temp_id
+)
+-- assign_temp_id_unnested as 
+
+-- (SELECT
+--   DENSE_RANK() OVER (ORDER BY full_id) AS new_temp_id,
+--   temp_id,
+--   full_id,
+--   pos_id,
+--   ecom_id,
+--   last_name,
+--   first_name,
+--   email,
+--   phone,
+  
+-- FROM
+--   FullClients
+-- ORDER BY
+--   full_id, temp_id
+-- ) 
+SELECT DISTINCT
+  case when temp_id is null then new_temp_id
+  else temp_id END as temp_id,
+  IFNULL(cj.full_id,tid.full_id) as full_id,
+  cj.pos_id,
+  cj.ecom_id,
+  cj.pos_created_by_id,
+  cj.ecom_created_by_id,
+  cj.Sources_Account_id,
+  cj.last_name,
+  cj.middle_name,
+  cj.first_name,
+  cj.email ,
+  cj.phone ,
+  cj.Sources_Source_Id,
+  cj.Sources_Source_Customer_Id,
+  cj.Email_main_email,
+  cj.Email_source_id,
+  cj.phone_main_phone,
+  cj.Phone_source_id,
+  cj.Phone_home_phone,
+  cj.Phone_office_phone,
+  cj.fictitious_customer,
+  cj.Prefered_Postal_Address_Address,
+  cj.Prefered_Postal_Address_ZipCode,
+  cj.Prefered_Postal_Address_City,
+  cj.Prefered_Postal_Address_State,
+  cj.Prefered_Postal_Address_CountryId,
+  cj.Prefered_Postal_Address_CountryName,
+  cj.LANGUAGE,
+  cj.Nationality,
+  cj.birthdate,
+  cj.Salutation,
+  cj.Salutation_Gender,
+  cj.Account_Creation_Date,
+  cj.Last_Activity_Date,
+  cj.Last_Viewed_Date,
+  cj.Last_Modified_Date,
+  cj.consent_homephone_code,
+  cj.consent_officephone_code,
+  cj.consent_cellphone_code,
+  cj.consent_email1_code,
+  cj.consent_email2_code,
+  -- cj.Contactability_Email,
+  -- cj.Contactability_Phone,
+  -- cj.Contactability_Print,
+  cj.Date_Of_Acceptance,
+  cj.Date_Of_Opt_In_Update,
+  cj.Privacy_Policy_Signed,
+  cj.Privacy_Policy_Acceptance,
+  cj.Sales_Associate,
+  cj.Master_Record_Id,
+  cj.last_update_date  ,
+  cj.tech_golden_id
+FROM
+  assign_temp_id_unnested tid
+left JOIN
+  ${ref("WRK_CUSTOMER_JOIN")} cj
+ON
+    tid.full_id = cj.full_id 
+
+
+
+ORDER BY
+  last_name,
+  first_name,
+  phone,
+  email
+-- WITH FullJoinsIDs AS (
+--   SELECT distinct full_id, pos_id, ecom_id, last_name, first_name, email, phone
+--   FROM ${ref("WRK_CUSTOMER_JOIN")}
+
+-- ), Identification AS (
+--   SELECT
+--     full_id,
+--     pos_id,
+--     ecom_id,
+--     last_name,
+--     first_name,
+--     email,
+--     phone,
+--     MIN(full_id) OVER (PARTITION BY email) AS email_min_id,
+--     MIN(full_id) OVER (PARTITION BY phone) AS phone_min_id
+--   FROM FullJoinsIDs
+--   WHERE email IS NOT NULL OR phone IS NOT NULL
+--   order by full_id
+-- ),
+
+-- MinimizedIDs AS (
+--   SELECT
+--     full_id,
+--     pos_id,
+--     ecom_id,
+--     last_name,
+--     first_name,
+--     email,
+--     phone,
+--     COALESCE(pos_id, ecom_id) AS new_full_id
+--   FROM Identification
+--   order by full_id
+
+-- ),
+
+-- -- Include customers with no email or phone, treated as unique
+-- CompleteIDs AS (
+--   SELECT 
+--     new_full_id AS full_id,
+--     pos_id,
+--     ecom_id,
+--     last_name,
+--     first_name,
+--     email,
+--     phone
+--   FROM MinimizedIDs
+--   UNION ALL
+--   SELECT 
+--     full_id,
+--     pos_id,
+--     ecom_id,
+--     last_name,
+--     first_name,
+--     email,
+--     phone
+--   FROM FullJoinsIDs
+--   WHERE email IS NULL AND phone IS NULL
+-- ),
+
+-- -- Filter WRK_CREATE_TEMP_ID for Lola Roberts
+-- TempIDFiltered AS (
+--   SELECT DISTINCT
+--   full_id, 
+--   pos_id, 
+--   ecom_id, 
+--   last_name, 
+--   first_name, 
+--   email, 
+--   phone
+--   FROM
+--   ${ref("WRK_CREATE_TEMP_ID")}
+-- ),
+-- FixFullIds as 
+-- (SELECT 
+--     COALESCE(t.full_id, c.full_id) AS full_id,  -- Prefer the full_id from TempIDFiltered if available
+--     c.pos_id,
+--     c.ecom_id,
+--     c.last_name,
+--     c.first_name,
+--     c.email,
+--     c.phone
+-- FROM CompleteIDs c
+--  LEFT JOIN TempIDFiltered t
+-- ON c.last_name = t.last_name 
+--     AND c.first_name = t.first_name
+--     AND c.email IS NOT NULL AND  c.phone IS NOT NULL 
+--     AND (
+--         (c.email = t.email)  -- Matching emails 
+--         OR 
+--         (c.phone = t.phone)  -- Matching phones 
+--     )
+-- ),
+-- missing_clients AS (
+--   SELECT *
+--   FROM TempIDFiltered
+--   WHERE full_id NOT IN (SELECT DISTINCT full_id FROM FixFullIds)
+-- ),
+-- FullClients as 
+-- (SELECT * FROM FixFullIds
+-- UNION ALL
+-- SELECT * FROM missing_clients)
+-- ,
+-- assign_temp_id_unnested as 
+
+-- (SELECT
+--   DENSE_RANK() OVER (ORDER BY full_id) AS temp_id,
+--   full_id,
+--   pos_id,
+--   ecom_id,
+--   last_name,
+--   first_name,
+--   email,
+--   phone,
+  
+-- FROM
+--   FullClients
+-- ORDER BY
+--   full_id, temp_id
+-- )
+-- SELECT DISTINCT
+--   temp_id,
+--   IFNULL(cj.full_id,tid.full_id) as full_id,
+--   cj.pos_id,
+--   cj.ecom_id,
+--   cj.pos_created_by_id,
+--   cj.ecom_created_by_id,
+--   cj.Sources_Account_id,
+--   cj.last_name,
+--   cj.middle_name,
+--   cj.first_name,
+--   cj.email ,
+--   cj.phone ,
+--   cj.Sources_Source_Id,
+--   cj.Sources_Source_Customer_Id,
+--   cj.Email_main_email,
+--   cj.Email_source_id,
+--   cj.phone_main_phone,
+--   cj.Phone_source_id,
+--   cj.Phone_home_phone,
+--   cj.Phone_office_phone,
+--   cj.fictitious_customer,
+--   cj.Prefered_Postal_Address_Address,
+--   cj.Prefered_Postal_Address_ZipCode,
+--   cj.Prefered_Postal_Address_City,
+--   cj.Prefered_Postal_Address_State,
+--   cj.Prefered_Postal_Address_CountryId,
+--   cj.Prefered_Postal_Address_CountryName,
+--   cj.LANGUAGE,
+--   cj.Nationality,
+--   cj.birthdate,
+--   cj.Salutation,
+--   cj.Salutation_Gender,
+--   cj.Account_Creation_Date,
+--   cj.Last_Activity_Date,
+--   cj.Last_Viewed_Date,
+--   cj.Last_Modified_Date,
+--   cj.consent_homephone_code,
+--   cj.consent_officephone_code,
+--   cj.consent_cellphone_code,
+--   cj.consent_email1_code,
+--   cj.consent_email2_code,
+--   -- cj.Contactability_Email,
+--   -- cj.Contactability_Phone,
+--   -- cj.Contactability_Print,
+--   cj.Date_Of_Acceptance,
+--   cj.Date_Of_Opt_In_Update,
+--   cj.Privacy_Policy_Signed,
+--   cj.Privacy_Policy_Acceptance,
+--   cj.Sales_Associate,
+--   cj.Master_Record_Id,
+--   cj.last_update_date  ,
+--   cj.tech_golden_id
+-- FROM
+--   assign_temp_id_unnested tid
+-- left JOIN
+--   ${ref("WRK_CUSTOMER_JOIN")} cj
+-- ON
+--     tid.full_id = cj.full_id 
+
+
+
+-- ORDER BY
+--   last_name,
+--   first_name,
+--   phone,
+--   email

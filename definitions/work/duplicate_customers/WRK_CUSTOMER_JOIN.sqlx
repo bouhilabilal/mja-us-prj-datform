@@ -1,0 +1,85 @@
+
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CUSTOMER_JOIN",
+    tags: ["dimensions", "CUSTOMERS","duplicate"]
+    
+}
+
+
+js {
+    const {
+        largest
+    } = require("includes/merging_functions/merge_cross_source.js");
+}
+
+SELECT
+  COALESCE(CONCAT(pos.Sources_Source_Customer_Id, '----', ecom.Sources_Source_Customer_Id), pos.Sources_Source_Customer_Id, ecom.Sources_Source_Customer_Id) AS full_id,
+  pos.Sources_Source_Customer_Id AS pos_id,
+  ecom.Sources_Source_Customer_Id AS ecom_id,
+  pos.Sources_Created_By_Id AS pos_created_by_id,
+  ecom.Sources_Created_By_Id AS ecom_created_by_id,
+  COALESCE(ecom.Sources_Account_id, pos.Sources_Account_id) AS Sources_Account_id,
+  COALESCE(ecom.last_name, pos.last_name) AS last_name,
+  COALESCE(ecom.middle_name, pos.middle_name) AS middle_name,
+  COALESCE(ecom.first_name, pos.first_name) AS first_name,
+  COALESCE(ecom.email, pos.email) AS email,
+  COALESCE(ecom.Phone_cell_phone, pos.Phone_cell_phone) AS phone,
+  COALESCE(ecom.Sources_Source_Id, pos.Sources_Source_Id) AS Sources_Source_Id,
+  COALESCE(ecom.Sources_Source_Customer_Id, pos.Sources_Source_Customer_Id) AS Sources_Source_Customer_Id,
+  COALESCE(ecom.Sources_Created_By_Id, pos.Sources_Created_By_Id) AS Sources_Created_By_Id,
+  COALESCE(ecom.Email_main_email, pos.Email_main_email) AS Email_main_email,
+  COALESCE(ecom.Email_source_id, pos.Email_source_id) AS Email_source_id,
+  COALESCE(ecom.phone_main_phone, pos.phone_main_phone) AS phone_main_phone,
+  COALESCE(ecom.Phone_source_id, pos.Phone_source_id) AS Phone_source_id,
+  COALESCE(ecom.Phone_home_phone, pos.Phone_home_phone) AS Phone_home_phone,
+  COALESCE(ecom.Phone_office_phone, pos.Phone_office_phone) AS Phone_office_phone,
+  COALESCE(ecom.fictitious_customer, pos.fictitious_customer) AS fictitious_customer,
+  COALESCE(ecom.Prefered_Postal_Address_Address, pos.Prefered_Postal_Address_Address) AS Prefered_Postal_Address_Address,
+  COALESCE(ecom.Prefered_Postal_Address_ZipCode, pos.Prefered_Postal_Address_ZipCode) AS Prefered_Postal_Address_ZipCode,
+  COALESCE(ecom.Prefered_Postal_Address_City, pos.Prefered_Postal_Address_City) AS Prefered_Postal_Address_City,
+  COALESCE(ecom.Prefered_Postal_Address_State, pos.Prefered_Postal_Address_State) AS Prefered_Postal_Address_State,
+  COALESCE(ecom.Prefered_Postal_Address_CountryId, pos.Prefered_Postal_Address_CountryId) AS Prefered_Postal_Address_CountryId,
+  COALESCE(ecom.Prefered_Postal_Address_CountryName, pos.Prefered_Postal_Address_CountryName) AS Prefered_Postal_Address_CountryName,
+  COALESCE(ecom.LANGUAGE, pos.LANGUAGE) AS LANGUAGE,
+  COALESCE(ecom.Nationality, pos.Nationality) AS Nationality,
+  COALESCE(ecom.birthdate, pos.birthdate) AS birthdate,
+  COALESCE(ecom.Salutation, pos.Salutation) AS Salutation,
+  COALESCE(ecom.Salutation_Gender, pos.Salutation_Gender) AS Salutation_Gender,
+  COALESCE(ecom.Account_Creation_Date, pos.Account_Creation_Date) AS Account_Creation_Date,
+  COALESCE(ecom.Last_Activity_Date, pos.Last_Activity_Date) AS Last_Activity_Date,
+  COALESCE(ecom.Last_Viewed_Date, pos.Last_Viewed_Date) AS Last_Viewed_Date,
+  COALESCE(ecom.Last_Modified_Date, pos.Last_Modified_Date) AS Last_Modified_Date,
+  COALESCE(ecom.consent_homephone_code, pos.consent_homephone_code) AS consent_homephone_code,
+  COALESCE(ecom.consent_officephone_code, pos.consent_officephone_code) AS consent_officephone_code,
+  COALESCE(ecom.consent_cellphone_code, pos.consent_cellphone_code) AS consent_cellphone_code,
+  COALESCE(ecom.consent_email1_code, pos.consent_email1_code) AS consent_email1_code,
+  COALESCE(ecom.consent_email2_code, pos.consent_email2_code) AS consent_email2_code,
+  -- COALESCE(ecom.Contactability_Email, pos.Contactability_Email) AS Contactability_Email,
+  -- COALESCE(ecom.Contactability_Phone, pos.Contactability_Phone) AS Contactability_Phone,
+  -- COALESCE(ecom.Contactability_Print, pos.Contactability_Print) AS Contactability_Print,
+  COALESCE(ecom.Date_Of_Acceptance, pos.Date_Of_Acceptance) AS Date_Of_Acceptance,
+  COALESCE(ecom.Date_Of_Opt_In_Update, pos.Date_Of_Opt_In_Update) AS Date_Of_Opt_In_Update,
+  COALESCE(ecom.Privacy_Policy_Signed, pos.Privacy_Policy_Signed) AS Privacy_Policy_Signed,
+  COALESCE(ecom.Privacy_Policy_Acceptance, pos.Privacy_Policy_Acceptance) AS Privacy_Policy_Acceptance,
+  COALESCE(ecom.Sales_Associate, pos.Sales_Associate) AS Sales_Associate,
+  COALESCE(ecom.Master_Record_Id, pos.Master_Record_Id) AS Master_Record_Id,
+  COALESCE(ecom.tech_golden_id, pos.tech_golden_id) AS tech_golden_id,
+  ${
+      largest(
+          "pos.last_update_date",
+          "ecom.last_update_date"
+      )
+  }
+  AS last_update_date,
+FROM
+  ${ref("INT_CUSTOMERS_Y2_CLEANED_updated")}pos
+FULL JOIN
+  ${ref("INT_CUSTOMERS_SFCC_CLEANED_updated")} ecom
+ON
+  pos.Sources_Source_Customer_Id = ecom.Sources_Source_Customer_Id
+
+
+  order by last_name,first_name,email
+

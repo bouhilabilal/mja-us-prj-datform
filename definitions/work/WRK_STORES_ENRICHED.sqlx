@@ -1,0 +1,28 @@
+-- Filename: add_new_columns.sqlx
+
+config {
+  type: "table",
+  schema: "work",
+  name: "WRK_STORES",
+  tags: ["dimensions", "STORES"]
+}
+
+SELECT 
+  *,
+  
+  -- Calculate 'active' column
+  CASE 
+    WHEN opening_date IS NULL THEN FALSE
+    WHEN closing_date IS NULL THEN TRUE
+    WHEN DATE(closing_date) > CURRENT_DATE THEN TRUE
+    ELSE FALSE
+  END AS active,
+  -- Calculate 'like_for_like' column
+  CASE 
+    WHEN 
+      opening_date < DATE(CAST(( EXTRACT(YEAR FROM CURRENT_DATE())-1)  AS STRING) || '-01-01') AND
+      (closing_date IS NULL OR closing_date >= CURRENT_DATE)
+    THEN TRUE
+    ELSE FALSE
+  END AS like_for_like
+FROM ${ref("INT_STORES")}

@@ -1,0 +1,19 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_GOLDEN_ID_REF",
+        tags: ["dimensions", "CUSTOMERS","GOLDEN_ID","cust_without_dudup"],
+
+}
+
+  -- this is a temp script to eliminate errors
+SELECT
+  temp_id AS golden_id,
+  pos AS pos_id,
+  ecom AS ecom_id
+FROM
+  ${ref("WRK_CUSTOMER_MERGE")}
+LEFT JOIN
+  UNNEST(pos_id) AS pos
+LEFT JOIN
+  UNNEST(ecom_id) AS ecom

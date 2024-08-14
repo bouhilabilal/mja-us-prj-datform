@@ -1,0 +1,13 @@
+config {  
+ type: "table",
+    schema: "snapshot",
+    name: "GOLDEN_ID_REF",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup","segmentation_new"],
+
+    }
+
+select distinct
+Customer_Id,Source_Customer_Id
+FROM ${ref("DI_CUSTOMERS")} 
+left join unnest ( Sources)
+

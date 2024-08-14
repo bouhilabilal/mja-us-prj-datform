@@ -1,0 +1,43 @@
+-- Filename: transform_table_columns.sqlx
+
+config {
+  type: "table",
+  schema: "initialization",
+  name: "INT_STORES",
+    tags: ["dimensions","initialization", "STORES"]
+}
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+SELECT 
+  CAST(store_code AS STRING) AS store_code,
+  store_name,
+  location_name,
+  street1,
+  street2,
+  street3,
+  zip_code,
+  city,
+  State,
+  area_id,
+  area_name,
+  country_id,
+  country_name,
+  zone_id,
+  zone_name,
+  store_type,
+  cluster,
+  distribution_type,
+  market_name,
+  storage_location_code,
+  company_code,
+  currency_key,
+  District,
+  PARSE_DATE('%Y%m%d', CASE WHEN TRIM(opening_date) = '' THEN NULL ELSE opening_date END) AS opening_date,
+  PARSE_DATE('%Y%m%d', CASE WHEN TRIM(closing_date) = '' THEN NULL ELSE closing_date END) AS closing_date,
+
+  -- PARSE_DATE('%Y%m%d', opening_date) AS opening_date,
+  -- PARSE_DATE('%Y%m%d', closing_date) AS closing_date
+FROM mja_us_bqd_dpf_anp_01_${env_prefix}.ANP_STORES

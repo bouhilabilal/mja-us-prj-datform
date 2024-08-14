@@ -1,0 +1,13 @@
+config {
+  type: "table",
+  schema: "work",
+  name: "WRK_CUSTOMER_GOLDEN_ID_TEMP",
+}
+
+SELECT 
+  temp_id as golden_id, 
+  pos_id,
+  ecom_id
+FROM 
+  ${ref("WRK_CUSTOMER_MERGE")}
+  order by temp_id 

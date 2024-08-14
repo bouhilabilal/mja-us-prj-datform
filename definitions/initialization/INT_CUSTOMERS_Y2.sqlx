@@ -1,0 +1,150 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_CUSTOMERS_Y2",
+    tags: ["dimensions", "initialization","CUSTOMERS","duplicate"],
+    dependencies: ["DI_SALES_ADVISOR"]
+}
+
+
+
+js {
+    const {
+        clean_email
+    } = require("includes/cleaning_functions/clean_email.js");
+    const {
+        clean_name,
+        clean_name_only_roman_letters
+    } = require("includes/cleaning_functions/clean_name.js");
+    const {
+        full_date
+    } = require("includes/cleaning_functions/clean_date.js");
+    const {
+        clean_phone
+    } = require("includes/cleaning_functions/clean_phone.js");
+    env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+}
+with customers_y2_update as (
+  select 
+CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+CASE WHEN Sources_Source_Customer_Id = '' THEN NULL ELSE Sources_Source_Customer_Id END AS Sources_Source_Customer_Id,
+CASE WHEN Sources_Account_id = '' THEN NULL ELSE Sources_Account_id END AS Sources_Account_id,
+CASE WHEN Sources_Created_By_Id = '' THEN NULL ELSE Sources_Created_By_Id END AS Sources_Created_By_Id,
+CASE WHEN last_name = '' THEN NULL ELSE last_name END AS last_name,
+CASE WHEN first_name = '' THEN NULL ELSE first_name END AS first_name,
+CASE WHEN middle_Name = '' THEN NULL ELSE middle_Name END AS middle_Name,
+CASE WHEN Email_main_email = '' THEN NULL ELSE Email_main_email END AS Email_main_email,
+CASE WHEN Email_source_id = '' THEN NULL ELSE Email_source_id END AS Email_source_id,
+CASE WHEN email_value = '' THEN NULL ELSE email_value END AS email_value,
+CASE WHEN phone_main_phone = '' THEN NULL ELSE phone_main_phone END AS phone_main_phone,
+CASE WHEN Phone_source_id = '' THEN NULL ELSE Phone_source_id END AS Phone_source_id,
+CASE WHEN phone_cell_phone = '' THEN NULL ELSE phone_cell_phone END AS phone_cell_phone,
+CASE WHEN Phone_home_phone = '' THEN NULL ELSE Phone_home_phone END AS Phone_home_phone,
+CASE WHEN Phone_office_phone = '' THEN NULL ELSE Phone_office_phone END AS Phone_office_phone,
+CASE WHEN fictitious_customer = '' THEN NULL ELSE fictitious_customer END AS fictitious_customer,
+CASE WHEN Prefered_Postal_Address_Address = '' THEN NULL ELSE Prefered_Postal_Address_Address END AS Prefered_Postal_Address_Address,
+CASE WHEN Prefered_Postal_Address_ZipCode = '' THEN NULL ELSE Prefered_Postal_Address_ZipCode END AS Prefered_Postal_Address_ZipCode,
+CASE WHEN Prefered_Postal_Address_City = '' THEN NULL ELSE Prefered_Postal_Address_City END AS Prefered_Postal_Address_City,
+CASE WHEN Prefered_Postal_Address_State = '' THEN NULL ELSE Prefered_Postal_Address_State END AS Prefered_Postal_Address_State,
+CASE WHEN Prefered_Postal_Address_CountryId = '' THEN NULL ELSE Prefered_Postal_Address_CountryId END AS Prefered_Postal_Address_CountryId,
+CASE WHEN Prefered_Postal_Address_CountryName = '' THEN NULL ELSE Prefered_Postal_Address_CountryName END AS Prefered_Postal_Address_CountryName,
+CASE WHEN LANGUAGE = '' THEN NULL ELSE LANGUAGE END AS LANGUAGE,
+CASE WHEN Nationality = '' THEN NULL ELSE Nationality END AS Nationality,
+CASE WHEN birthdate = '' THEN NULL ELSE birthdate END AS birthdate,
+CASE WHEN Salutation = '' THEN NULL ELSE Salutation END AS Salutation,
+CASE WHEN Salutation_Gender = '' THEN NULL ELSE Salutation_Gender END AS Salutation_Gender,
+CASE WHEN Account_Creation_Date = '' THEN NULL ELSE Account_Creation_Date END AS Account_Creation_Date,
+CASE WHEN Last_Activity_Date = '' THEN NULL ELSE Last_Activity_Date END AS Last_Activity_Date,
+CASE WHEN Last_Modified_Date = '' THEN NULL ELSE Last_Modified_Date END AS Last_Modified_Date,
+CASE WHEN Last_Viewed_Date = '' THEN NULL ELSE Last_Viewed_Date END AS Last_Viewed_Date,
+CASE WHEN consent_homephone_code = '' THEN NULL ELSE consent_homephone_code END AS consent_homephone_code,
+CASE WHEN consent_officephone_code = '' THEN NULL ELSE consent_officephone_code END AS consent_officephone_code,
+CASE WHEN consent_cellphone_code = '' THEN NULL ELSE consent_cellphone_code END AS consent_cellphone_code,
+CASE WHEN consent_email1_code = '' THEN NULL ELSE consent_email1_code END AS consent_email1_code,
+CASE WHEN consent_email2_code = '' THEN NULL ELSE consent_email2_code END AS consent_email2_code,
+CASE WHEN Date_Of_Acceptance = '' THEN NULL ELSE Date_Of_Acceptance END AS Date_Of_Acceptance,
+CASE WHEN Date_Of_Opt_In_Update = '' THEN NULL ELSE Date_Of_Opt_In_Update END AS Date_Of_Opt_In_Update,
+CASE WHEN Privacy_Policy_Signed = '' THEN NULL ELSE Privacy_Policy_Signed END AS Privacy_Policy_Signed,
+CASE WHEN Privacy_Policy_Acceptance = '' THEN NULL ELSE Privacy_Policy_Acceptance END AS Privacy_Policy_Acceptance,
+CASE WHEN Sales_Associate = '' THEN NULL ELSE Sales_Associate END AS Sales_Associate,
+CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Record_Id
+
+   from 
+  -- init_temp_tables.customers_y2
+
+  mja_us_bqd_dpf_y2_01_${env_prefix}.Y2_CUSTOMERS
+)
+SELECT
+--   'y2' as  Sources_Source_Id ,
+  Sources_Source_Id,
+  UPPER(Sources_Source_Customer_Id) as Sources_Source_Customer_Id,
+  Sources_Account_id,
+  store_code as Sources_Created_By_Id,
+  CASE
+    WHEN REGEXP_CONTAINS(REGEXP_REPLACE(cust.Last_Name, r'  +', ' '), r'[!"#%$​*+,:;<=>?@^_`|~€£]|[])}]|[[({]') THEN NULL
+  ELSE
+  INITCAP(TRIM(REGEXP_REPLACE(cust.Last_Name, r'  +', ' ')))
+END
+  AS last_name,
+  CASE
+    WHEN REGEXP_CONTAINS(REGEXP_REPLACE(cust.First_Name, r'  +', ' '), r'[!"#%$​*+,:;<=>?@^_`|~€£]|[])}]|[[({]') THEN NULL
+  ELSE
+  INITCAP(TRIM(REGEXP_REPLACE(cust.First_Name, r'  +', ' ')))
+END
+  AS first_name,
+  CASE
+    WHEN REGEXP_CONTAINS(REGEXP_REPLACE(Middle_Name, r'  +', ' '), r'[!"#%$​*+,:;<=>?@^_`|~€£]|[])}]|[[({]') THEN NULL
+  ELSE
+  INITCAP(TRIM(REGEXP_REPLACE(Middle_Name, r'  +', ' ')))
+END
+  AS middle_Name,
+  CAST(CASE
+    WHEN TRIM(Email_main_email) = '' THEN NULL
+    else Email_main_email END AS BOOLEAN) AS Email_main_email,
+  Email_source_id,
+  ${clean_email("Email_value")} AS email_value,
+  CAST(CASE
+    WHEN TRIM(Phone_main_phone) = '' THEN NULL
+    else Phone_main_phone END AS BOOLEAN) AS phone_main_phone,
+  Phone_source_id,
+  ${clean_phone("Phone_cell_phone")} AS phone_cell_phone,
+  ${clean_phone("Phone_home_phone")} AS Phone_home_phone,
+  ${clean_phone("Phone_office_phone")} AS Phone_office_phone,
+  CAST(CASE
+    WHEN TRIM(fictitious_customer) = '' THEN NULL
+    else fictitious_customer END AS BOOLEAN) AS fictitious_customer,
+  Prefered_Postal_Address_Address,
+  Prefered_Postal_Address_ZipCode,
+  Prefered_Postal_Address_City,
+  Prefered_Postal_Address_State,
+  Prefered_Postal_Address_CountryId,
+  Prefered_Postal_Address_CountryName,
+  LANGUAGE,
+  Nationality,
+  ${full_date("Birthdate")} AS birthdate,
+  Salutation,
+  Salutation_Gender,
+  ${full_date("Account_Creation_Date")} AS Account_Creation_Date,
+  ${full_date("Last_Activity_Date")} AS Last_Activity_Date,
+  ${full_date("Last_Modified_Date")} AS Last_Modified_Date,
+  ${full_date("Last_Viewed_Date")} AS Last_Viewed_Date,
+  consent_homephone_code,
+  consent_officephone_code,
+  consent_cellphone_code,
+  consent_email1_code,
+  consent_email2_code,
+  ${full_date("Date_Of_Acceptance")} AS Date_Of_Acceptance,
+  ${full_date("Date_Of_Opt_In_Update")} AS Date_Of_Opt_In_Update,
+  ${full_date("Privacy_Policy_Signed")} AS Privacy_Policy_Signed,
+  ${full_date("Privacy_Policy_Acceptance")} AS Privacy_Policy_Acceptance,
+  upper(Sales_Associate) as Sales_Associate,
+  Master_Record_Id
+FROM
+  --  mja_us_bqd_dpf_y2_01_${env_prefix}.Y2_CUSTOMERS
+customers_y2_update cust
+left join dimensions.DI_SALES_ADVISOR  sa
+on upper(cust.Sales_Associate) = upper(sa.sales_person_key)
+
+
