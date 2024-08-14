@@ -1,0 +1,15 @@
+config {
+  type: "incremental",
+  schema: "dimensions",
+  name: "DI_CURRENCY_RATES",
+    tags: ["dimensions", "CURRENCY_RATES"],
+    uniqueKey : ["ExRateType_id","ExRateType","FromCurrency",'ToCurrency',"ExRateDate"]
+}
+incremental_where {
+  ExRateDate > ExRateDate FROM ${self()})
+}
+
+SELECT
+*
+FROM
+  ${ref("INT_CURRENCY_RATES_EXTRACTED")}

@@ -1,0 +1,19 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_match_ref_temp",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"]
+
+}
+
+ -- part 4 GOLDEN_ID_match_ref_temp
+
+  SELECT
+    DISTINCT temp_id,
+    MIN(golden_ID) OVER(PARTITION BY temp_id) AS golden_id
+  FROM
+    ${ref("GOLDEN_ID_temp_id_source_unnested")} TEMP
+  LEFT JOIN
+    ${ref("GOLDEN_ID_golden_id_ref_source_grouped")} ref
+  ON
+    temp.unnested_source_ids = ref.unnested_source_ids 

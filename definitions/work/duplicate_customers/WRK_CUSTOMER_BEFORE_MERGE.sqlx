@@ -1,0 +1,98 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CUSTOMER_BEFORE_MERGE",
+    tags: ["dimensions", "CUSTOMERS","MISSING"]
+}
+
+js {
+    const {
+        recent,
+        ancient
+    } = require("includes/merging_functions/merge_on_time.js");
+  
+  const customers_typer_table = dataform.projectConfig.vars.customers_typer ;
+
+}
+
+WITH RankedResults AS (
+  SELECT
+    *,
+    type_cust.Customer_Type as type_custCustomer_Type,
+    ROW_NUMBER() OVER(PARTITION BY temp_id, pos_id, ecom_id ORDER BY last_update_date DESC) AS row_num
+  FROM ${ref("FIX_MISSING_IDS")}
+  LEFT JOIN ${customers_typer_table} type_cust
+  ON type_cust.Customer_ID = pos_id OR type_cust.Customer_ID = ecom_id
+),
+TechGoldenID AS (
+  SELECT
+    temp_id,
+    MAX(tech_golden_id) AS tech_golden_id
+  FROM RankedResults
+  WHERE tech_golden_id IS NOT NULL
+  GROUP BY temp_id
+),
+FinalResults AS (
+  SELECT
+    r.*,
+    COALESCE(r.tech_golden_id, tg.tech_golden_id) AS filled_tech_golden_id
+  FROM RankedResults r
+  LEFT JOIN TechGoldenID tg
+  ON r.temp_id = tg.temp_id
+)
+SELECT
+  temp_id,
+  full_id,
+  pos_id,
+  ecom_id,
+  pos_created_by_id,
+  ecom_created_by_id,
+  Sources_Account_id,
+  last_name,
+  middle_name,
+  first_name,
+  email,
+  phone,
+  Sources_Source_Id,
+  Sources_Source_Customer_Id,
+  Email_main_email,
+  Email_source_id,
+  phone_main_phone,
+  Phone_source_id,
+  Phone_home_phone,
+  Phone_office_phone,
+  fictitious_customer,
+  Prefered_Postal_Address_Address,
+  Prefered_Postal_Address_ZipCode,
+  Prefered_Postal_Address_City,
+  Prefered_Postal_Address_State,
+  Prefered_Postal_Address_CountryId,
+  Prefered_Postal_Address_CountryName,
+  LANGUAGE,
+  Nationality,
+  birthdate,
+  Salutation,
+  Salutation_Gender,
+  Account_Creation_Date,
+  Last_Activity_Date,
+  Last_Viewed_Date,
+  Last_Modified_Date,
+  consent_homephone_code,
+  consent_officephone_code,
+  consent_cellphone_code,
+  consent_email1_code,
+  consent_email2_code,
+  Date_Of_Acceptance,
+  Date_Of_Opt_In_Update,
+  Privacy_Policy_Signed,
+  Privacy_Policy_Acceptance,
+  Sales_Associate,
+  Master_Record_Id,
+  last_update_date,
+  filled_tech_golden_id AS tech_golden_id,
+  customer_type,
+  Customer_ID,
+  type_custCustomer_Type,
+  row_num
+FROM FinalResults
+ORDER BY temp_id, row_num

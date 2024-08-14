@@ -1,0 +1,26 @@
+config {
+  type: "table",
+  schema: "dimensions", // Change this to your actual schema name
+  name: "DI_SEGMENTS",
+  description: "A table to store segment information with their respective order",
+  columns: {
+    Segment: "The name of the segment",
+    Order: "The order or rank of the segment"
+  }
+  ,   tags: ["FIX_SEGMENTS",'utilities']
+
+}
+
+-- Dataform allows you to define the table structure and insert data in the same SQL block
+SELECT * FROM (
+  SELECT 'VVIC' AS Segment, 1 AS `Order` UNION ALL
+  SELECT 'VIC', 2 UNION ALL
+  SELECT 'New High Repeaters', 3 UNION ALL
+  SELECT 'High Repeaters', 3 UNION ALL
+  SELECT 'Core Repeaters', 4 UNION ALL
+  SELECT 'Low Repeaters', 5 UNION ALL
+  SELECT 'New High One Time Buyer', 6 UNION ALL
+  SELECT 'High One Time Buyer', 6 UNION ALL
+  SELECT 'Core One Time Buyer', 7 UNION ALL
+  SELECT 'Low One Time Buyer', 8
+)

@@ -1,0 +1,100 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CREATE_TEMP_ID",
+    tags: ["dimensions", "CUSTOMERS"]
+}
+
+  -- Regroup the matchable and unmatchable customers in the same table
+WITH
+  deduplicated_customer AS (
+  SELECT
+    nested_ids
+  FROM
+    ${ref("WRK_CUSTOMER_JOIN_UNMATCHABLE")}
+  UNION ALL
+  SELECT
+    nested_ids
+  FROM
+    ${ref("WRK_MATCH_DUPLICATES_BOTH_RULES")} ),
+  assign_temp_id AS (
+  SELECT
+    ROW_NUMBER() OVER() AS temp_id,
+    nested_ids
+  FROM
+    deduplicated_customer ),
+  assign_temp_id_unnested AS (
+  SELECT
+    temp_id,
+    full_id
+  FROM
+    assign_temp_id
+  CROSS JOIN
+    UNNEST(nested_ids) full_id )
+    -- Regroup the PII with all the other columns that we did not use for the deduplication process
+SELECT
+  temp_id,
+  cj.full_id,
+  cj.pos_id,
+  cj.ecom_id,
+  cj.pos_created_by_id,
+  cj.ecom_created_by_id,
+  cj.Sources_Account_id,
+  cj.last_name,
+  cj.middle_name,
+  cj.first_name,
+  cj.email ,
+  cj.phone ,
+  cj.Sources_Source_Id,
+  cj.Sources_Source_Customer_Id,
+  cj.Email_main_email,
+  cj.Email_source_id,
+  cj.phone_main_phone,
+  cj.Phone_source_id,
+  cj.Phone_home_phone,
+  cj.Phone_office_phone,
+  cj.fictitious_customer,
+  cj.Prefered_Postal_Address_Address,
+  cj.Prefered_Postal_Address_ZipCode,
+  cj.Prefered_Postal_Address_City,
+  cj.Prefered_Postal_Address_State,
+  cj.Prefered_Postal_Address_CountryId,
+  cj.Prefered_Postal_Address_CountryName,
+  cj.LANGUAGE,
+  cj.Nationality,
+  cj.birthdate,
+  cj.Salutation,
+  cj.Salutation_Gender,
+  cj.Account_Creation_Date,
+  cj.Last_Activity_Date,
+  cj.Last_Viewed_Date,
+  cj.Last_Modified_Date,
+  cj.consent_homephone_code,
+  cj.consent_officephone_code,
+  cj.consent_cellphone_code,
+  cj.consent_email1_code,
+  cj.consent_email2_code,
+  -- cj.Contactability_Email,
+  -- cj.Contactability_Phone,
+  -- cj.Contactability_Print,
+  cj.Date_Of_Acceptance,
+  cj.Date_Of_Opt_In_Update,
+  cj.Privacy_Policy_Signed,
+  cj.Privacy_Policy_Acceptance,
+  cj.Sales_Associate,
+  cj.Master_Record_Id,
+  cj.last_update_date  ,
+  cj.tech_golden_id
+FROM
+  assign_temp_id_unnested tid
+INNER JOIN
+  ${ref("WRK_CUSTOMER_JOIN")} cj
+ON
+  tid.full_id = cj.full_id
+
+
+ORDER BY
+  last_name,
+  first_name,
+  phone,
+  email

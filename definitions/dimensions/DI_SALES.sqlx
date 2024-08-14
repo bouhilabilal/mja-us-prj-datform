@@ -1,0 +1,628 @@
+
+config {
+  type: 'table',
+  schema: "facts",
+  name: "FACT_SALES",
+  tags: ["dimensions", "SALES", "cust_without_dudup"]
+}
+WITH sales AS (
+  SELECT
+    sale.Sales_Order_Id,
+    src.Source_Id AS source_Source_Id,
+    src.Sales_Order_Id AS source_Sales_Order_Id,
+    source_customer_id,
+    customer_id,
+    ol.order_line_id as sales_order_line_id,
+    ol.product_id,
+    ol.quantity,
+    ol.te_turnover,
+    ol.te_turnover_full_price,
+    ol.transaction_type,
+    order_date
+    FROM ${ref("FACT_SALES_CORRECTED")} sale,
+    UNNEST(sources) AS src,
+  UNNEST(order_line) AS ol
+  WHERE ol.transaction_type = 'SALE'
+),
+returns AS (
+  SELECT
+    sale.Sales_Order_Id,
+    src.Source_Id AS source_Source_Id,
+    src.Sales_Order_Id AS source_Sales_Order_Id,
+    customer_id,
+    source_customer_id,
+    ol.order_line_id  as resturn_order_line_id,
+
+    ol.product_id,
+    ol.quantity,
+    ol.te_turnover,
+    ol.te_turnover_full_price,
+    ol.transaction_type,
+    order_date
+    FROM ${ref("FACT_SALES_CORRECTED")} sale,
+    UNNEST(sources) AS src,
+  UNNEST(order_line) AS ol
+  WHERE ol.transaction_type IN ('RETURN', 'REFUND')
+),
+
+-- Matching sales with returns based on several criteria
+old_matched_sales_returns AS (
+  SELECT
+  distinct
+    s.Sales_Order_Id ,
+    r.Sales_Order_Id AS return_order_id,
+    s.customer_id,
+    s.source_customer_id,
+    s.product_id,
+    SUM (s.quantity) AS sale_quantity,
+    SUM (r.quantity) AS return_quantity,
+    s.order_date AS sale_date,
+    r.order_date AS return_date,
+    s.sales_order_line_id,
+
+    CASE
+        WHEN SUM (ifnull (r.quantity,0)) =0 then 0
+      WHEN SUM (ABS(ifnull (r.quantity,0))) = SUM (ifnull (s.quantity,0)) THEN 1  -- Total return
+      WHEN SUM (ABS(ifnull (r.quantity,0))) < SUM (ifnull (s.quantity,0)) THEN 2  -- Partial return
+      ELSE 0  -- No return (orphaned return lines can be handled separately if needed)
+    END AS flag
+  FROM sales s
+  LEFT JOIN returns r ON
+   s.source_customer_id = r.source_customer_id 
+    AND S.product_id = R.product_id
+    -- AND SAFE_DIVIDE(S.ti_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.ti_turnover_full_price, R.quantity)
+    AND (SAFE_DIVIDE(S.te_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.te_turnover_full_price, R.quantity)
+    or SAFE_DIVIDE(S.te_turnover, S.quantity) = SAFE_DIVIDE(R.te_turnover, R.quantity))
+    
+    AND r.order_date >= s.order_date 
+    AND ABS(r.quantity) <= s.quantity
+    -- AND s.source_Sales_Order_Id >= r.source_Sales_Order_Id
+    AND s.source_Sales_Order_Id <= r.source_Sales_Order_Id
+    AND (
+    s.source_Source_Id not like 'sfcc%' OR
+    (s.source_Source_Id like 'sfcc%' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id))
+    group by s.Sales_Order_Id,
+    s.source_customer_id,
+      r.Sales_Order_Id,
+      s.customer_id,
+      s.product_id,
+      s.order_date,
+      r.order_date,
+      s.sales_order_line_id
+),
+ranked_matched_sales_returns AS (
+  SELECT *,
+    ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id,customer_id,product_id,source_customer_id ORDER BY return_date) as rn
+  FROM (
+    SELECT
+      distinct
+      s.Sales_Order_Id,
+      r.Sales_Order_Id AS return_order_id,
+      s.customer_id,
+      s.source_customer_id,
+      s.product_id,
+      SUM(s.quantity) AS sale_quantity,
+      SUM(r.quantity) AS return_quantity,
+      s.order_date AS sale_date,
+      r.order_date AS return_date,
+      s.sales_order_line_id,
+      S.te_turnover as sale_te, S.quantity as sal_qtt,
+      R.te_turnover as return_te, R.quantity as return_qtt,
+      S.te_turnover_full_price as sale_te_full,
+      R.te_turnover_full_price as return_te_full,
+      CASE
+          WHEN SUM(IFNULL(r.quantity, 0)) = 0 THEN 0
+          WHEN SUM(ABS(IFNULL(r.quantity, 0))) = SUM(IFNULL(s.quantity, 0)) THEN 1  -- Total return
+          WHEN SUM(ABS(IFNULL(r.quantity, 0))) < SUM(IFNULL(s.quantity, 0)) THEN 2  -- Partial return
+          ELSE 0  -- No return (orphaned return lines can be handled separately if needed)
+      END AS flag
+    FROM sales s
+    LEFT JOIN returns r ON
+      s.source_customer_id = r.source_customer_id 
+      AND s.product_id = r.product_id
+      AND (SAFE_DIVIDE(S.te_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.te_turnover_full_price, R.quantity)
+      OR SAFE_DIVIDE(S.te_turnover, S.quantity) = SAFE_DIVIDE(R.te_turnover, R.quantity))
+      AND r.order_date >= s.order_date 
+      AND ABS(r.quantity) <= s.quantity
+      AND s.source_Sales_Order_Id <= r.source_Sales_Order_Id
+      AND (
+        s.source_Source_Id not like 'sfcc%' OR
+        (s.source_Source_Id like 'sfcc%' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id)
+      )
+    GROUP BY s.Sales_Order_Id, s.source_customer_id, r.Sales_Order_Id, s.customer_id,
+             s.product_id, s.order_date, r.order_date, s.sales_order_line_id,
+             S.te_turnover, S.quantity, R.te_turnover, R.quantity,
+             S.te_turnover_full_price, R.te_turnover_full_price
+  ) t
+)
+
+-- Selecting only the first matched return for each sale
+,matched_sales_returns as( 
+SELECT *
+FROM ranked_matched_sales_returns
+WHERE rn = 1)
+-- select * from matched_sales_returns
+--   where
+--  Sales_Order_Id =
+-- "2829838744013746366"
+,
+
+returned_sales as( 
+SELECT customer_id,source_customer_id,product_id,return_order_id,flag,Sales_Order_Id
+FROM matched_sales_returns
+where return_order_id is not null
+and rn = 1
+),
+sales_data AS (
+  SELECT
+    ol.Sales_Order_Id,
+    ol.customer_id,
+    ARRAY_AGG(STRUCT(ol.order_line_id,
+      ol.sales_advisor_id,
+      ol.product_id,
+        ol.transaction_type	,
+        ol.return_reason_code,
+      ol.product_markdown,
+      ol.discount_type,
+      ol.quantity,
+      ol.tax_rate,
+      ol.te_turnover,
+      ol.te_turnover_full_price,
+      ol.ti_turnover,
+      ol.ti_turnover_full_price,
+      ol.te_amount_discount,
+      ol.te_amount_markdown,
+      ol.ti_amount_discount,
+      ol.ti_amount_markdown,
+      CASE 
+        WHEN  return.flag is not null and return.flag = 2 and ol.transaction_type	='RETURN' THEN 2
+        else COALESCE(msr.flag, 1) 
+      END as return_flag
+      )
+      ORDER BY order_line_id,
+                ol.product_id,
+                return_reason_code,
+                product_markdown,
+                discount_type,
+                quantity,
+                transaction_type
+  ) AS order_line,
+    -- COALESCE(msr.flag, 0) AS flag
+    CASE
+    WHEN MAX(COALESCE(msr.flag, 1)) = 1 AND MIN(COALESCE(msr.flag, 1)) = 1 THEN 1  -- All flags are 1
+    WHEN MAX(COALESCE(msr.flag, 1)) = 0 AND MIN(COALESCE(msr.flag, 1)) = 0 THEN 0  -- All flags are 0
+    ELSE 2  -- Mixed flags or any presence of flag 2
+  END AS flag
+  FROM (select s.* except (order_line),ol.* from  ${ref("FACT_SALES_CORRECTED")} s
+  left join unnest(order_line) ol) ol
+  left JOIN matched_sales_returns msr ON ol.Sales_Order_Id = msr.Sales_Order_Id AND ol.product_id= msr.product_id
+  and sale_quantity = ol.quantity and sales_order_line_id = ol.order_line_id
+  -- left JOIN returned_sales return ON ol.Sales_Order_Id = return.return_order_id AND ol.product_id= return.product_id AND ol.customer_id= return.customer_id
+  left JOIN returned_sales return ON ol.Sales_Order_Id = return.Sales_Order_Id AND ol.product_id= return.product_id AND ol.customer_id= return.customer_id
+
+  group by ol.Sales_Order_Id,
+    ol.customer_id
+)
+-- select * from sales_data
+-- where  Sales_Order_Id = '861196706361521705'
+
+-- -- Final SELECT with the adjusted flag logic
+SELECT
+  s.Customer_Id,
+  s.* except(Customer_Id,order_line),
+  msr.order_line,
+  -- msr.order_line,
+  msr.flag,
+  CASE
+    WHEN msr.flag <> 1 THEN DENSE_RANK() OVER (PARTITION BY s.customer_id, (msr.flag <> 1) ORDER BY s.order_date,s.Sales_Order_Id)
+    ELSE NULL
+  END AS sales_order
+FROM ${ref("FACT_SALES_CORRECTED")} s
+inner JOIN sales_data msr ON s.Sales_Order_Id = msr.Sales_Order_Id 
+
+ORDER BY
+  s.customer_id,
+  s.order_date
+
+-- -- Defining sales and returns as previously done.
+-- WITH sales AS (
+--   SELECT
+--     sale.Sales_Order_Id,
+--     src.Source_Id AS source_Source_Id,
+--     src.Sales_Order_Id AS source_Sales_Order_Id,
+--     source_customer_id,
+--     customer_id,
+--     ol.order_line_id as sales_order_line_id,
+--     ol.product_id,
+--     ol.quantity,
+--     ol.te_turnover,
+--     ol.te_turnover_full_price,
+--     ol.transaction_type,
+--     order_date
+--     FROM ${ref("FACT_SALES_CORRECTED")} sale,
+--     UNNEST(sources) AS src,
+--   UNNEST(order_line) AS ol
+--   WHERE ol.transaction_type = 'SALE'
+-- ),
+-- returns AS (
+--   SELECT
+--     sale.Sales_Order_Id,
+--     src.Source_Id AS source_Source_Id,
+--     src.Sales_Order_Id AS source_Sales_Order_Id,
+--     customer_id,
+--     source_customer_id,
+--     ol.order_line_id  as resturn_order_line_id,
+
+--     ol.product_id,
+--     ol.quantity,
+--     ol.te_turnover,
+--     ol.te_turnover_full_price,
+--     ol.transaction_type,
+--     order_date
+--     FROM ${ref("FACT_SALES_CORRECTED")} sale,
+--     UNNEST(sources) AS src,
+--   UNNEST(order_line) AS ol
+--   WHERE ol.transaction_type IN ('RETURN', 'REFUND')
+-- ),
+
+-- -- Matching sales with returns based on several criteria
+-- old_matched_sales_returns AS (
+--   SELECT
+--   distinct
+--     s.Sales_Order_Id ,
+--     r.Sales_Order_Id AS return_order_id,
+--     s.customer_id,
+--     s.source_customer_id,
+--     s.product_id,
+--     SUM (s.quantity) AS sale_quantity,
+--     SUM (r.quantity) AS return_quantity,
+--     s.order_date AS sale_date,
+--     r.order_date AS return_date,
+--     s.sales_order_line_id,
+
+--     CASE
+--         WHEN SUM (ifnull (r.quantity,0)) =0 then 0
+--       WHEN SUM (ABS(ifnull (r.quantity,0))) = SUM (ifnull (s.quantity,0)) THEN 1  -- Total return
+--       WHEN SUM (ABS(ifnull (r.quantity,0))) < SUM (ifnull (s.quantity,0)) THEN 2  -- Partial return
+--       ELSE 0  -- No return (orphaned return lines can be handled separately if needed)
+--     END AS flag
+--   FROM sales s
+--   LEFT JOIN returns r ON
+--    s.source_customer_id = r.source_customer_id 
+--     AND S.product_id = R.product_id
+--     -- AND SAFE_DIVIDE(S.ti_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.ti_turnover_full_price, R.quantity)
+--     AND (SAFE_DIVIDE(S.te_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.te_turnover_full_price, R.quantity)
+--     or SAFE_DIVIDE(S.te_turnover, S.quantity) = SAFE_DIVIDE(R.te_turnover, R.quantity))
+    
+--     AND r.order_date >= s.order_date 
+--     AND ABS(r.quantity) <= s.quantity
+--     -- AND s.source_Sales_Order_Id >= r.source_Sales_Order_Id
+--     AND s.source_Sales_Order_Id <= r.source_Sales_Order_Id
+--     AND (
+--     s.source_Source_Id <> 'sfcc' OR
+--     (s.source_Source_Id = 'sfcc' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id))
+--     group by s.Sales_Order_Id,
+--     s.source_customer_id,
+--       r.Sales_Order_Id,
+--       s.customer_id,
+--       s.product_id,
+--       s.order_date,
+--       r.order_date,
+--       s.sales_order_line_id
+-- ),
+-- ranked_matched_sales_returns AS (
+--   SELECT *,
+--     ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id,customer_id,product_id,source_customer_id ORDER BY return_date) as rn
+--   FROM (
+--     SELECT
+--       distinct
+--       s.Sales_Order_Id,
+--       r.Sales_Order_Id AS return_order_id,
+--       s.customer_id,
+--       s.source_customer_id,
+--       s.product_id,
+--       SUM(s.quantity) AS sale_quantity,
+--       SUM(r.quantity) AS return_quantity,
+--       s.order_date AS sale_date,
+--       r.order_date AS return_date,
+--       s.sales_order_line_id,
+--       S.te_turnover as sale_te, S.quantity as sal_qtt,
+--       R.te_turnover as return_te, R.quantity as return_qtt,
+--       S.te_turnover_full_price as sale_te_full,
+--       R.te_turnover_full_price as return_te_full,
+--       CASE
+--           WHEN SUM(IFNULL(r.quantity, 0)) = 0 THEN 0
+--           WHEN SUM(ABS(IFNULL(r.quantity, 0))) = SUM(IFNULL(s.quantity, 0)) THEN 1  -- Total return
+--           WHEN SUM(ABS(IFNULL(r.quantity, 0))) < SUM(IFNULL(s.quantity, 0)) THEN 2  -- Partial return
+--           ELSE 0  -- No return (orphaned return lines can be handled separately if needed)
+--       END AS flag
+--     FROM sales s
+--     LEFT JOIN returns r ON
+--       s.source_customer_id = r.source_customer_id 
+--       AND s.product_id = r.product_id
+--       AND (SAFE_DIVIDE(S.te_turnover_full_price, S.quantity) = SAFE_DIVIDE(R.te_turnover_full_price, R.quantity)
+--       OR SAFE_DIVIDE(S.te_turnover, S.quantity) = SAFE_DIVIDE(R.te_turnover, R.quantity))
+--       AND r.order_date >= s.order_date 
+--       AND ABS(r.quantity) <= s.quantity
+--       AND s.source_Sales_Order_Id <= r.source_Sales_Order_Id
+--       AND (
+--         s.source_Source_Id <> 'sfcc' OR
+--         (s.source_Source_Id = 'sfcc' AND s.source_Sales_Order_Id = r.source_Sales_Order_Id)
+--       )
+--     GROUP BY s.Sales_Order_Id, s.source_customer_id, r.Sales_Order_Id, s.customer_id,
+--              s.product_id, s.order_date, r.order_date, s.sales_order_line_id,
+--              S.te_turnover, S.quantity, R.te_turnover, R.quantity,
+--              S.te_turnover_full_price, R.te_turnover_full_price
+--   ) t
+-- )
+
+-- -- Selecting only the first matched return for each sale
+-- ,matched_sales_returns as( 
+-- SELECT *
+-- FROM ranked_matched_sales_returns
+-- WHERE rn = 1)
+-- -- select * from matched_sales_returns
+-- --   where
+-- --  Sales_Order_Id =
+-- -- "2829838744013746366"
+-- ,
+
+-- returned_sales as( 
+-- SELECT customer_id,source_customer_id,product_id,return_order_id,flag
+-- FROM ranked_matched_sales_returns
+-- where return_order_id is not null
+-- and rn = 1
+-- ),
+-- sales_data AS (
+--   SELECT
+--     ol.Sales_Order_Id,
+--     ol.customer_id,
+--     ARRAY_AGG(STRUCT(ol.order_line_id,
+--       ol.sales_advisor_id,
+--       ol.product_id,
+--         ol.transaction_type	,
+--         ol.return_reason_code,
+--       ol.product_markdown,
+--       ol.discount_type,
+--       ol.quantity,
+--       ol.tax_rate,
+--       ol.te_turnover,
+--       ol.te_turnover_full_price,
+--       ol.ti_turnover,
+--       ol.ti_turnover_full_price,
+--       ol.te_amount_discount,
+--       ol.te_amount_markdown,
+--       ol.ti_amount_discount,
+--       ol.ti_amount_markdown,
+--       CASE 
+--         WHEN  return.flag is not null and return.flag = 2 and ol.transaction_type	='RETURN' THEN 2
+--         else COALESCE(msr.flag, 1) 
+--       END as return_flag
+--       )
+--       ORDER BY order_line_id,
+--                 ol.product_id,
+--                 return_reason_code,
+--                 product_markdown,
+--                 discount_type,
+--                 quantity,
+--                 transaction_type
+--   ) AS order_line,
+--     -- COALESCE(msr.flag, 0) AS flag
+--     CASE
+--     WHEN MAX(COALESCE(msr.flag, 1)) = 1 AND MIN(COALESCE(msr.flag, 1)) = 1 THEN 1  -- All flags are 1
+--     WHEN MAX(COALESCE(msr.flag, 1)) = 0 AND MIN(COALESCE(msr.flag, 1)) = 0 THEN 0  -- All flags are 0
+--     ELSE 2  -- Mixed flags or any presence of flag 2
+--   END AS flag
+--   FROM (select s.* except (order_line),ol.* from  ${ref("FACT_SALES_CORRECTED")} s
+--   left join unnest(order_line) ol) ol
+--   left JOIN matched_sales_returns msr ON ol.Sales_Order_Id = msr.Sales_Order_Id AND ol.product_id= msr.product_id
+--   and sale_quantity = ol.quantity and sales_order_line_id = ol.order_line_id
+--   left JOIN returned_sales return ON ol.Sales_Order_Id = return.return_order_id AND ol.product_id= return.product_id AND ol.customer_id= return.customer_id
+  
+--   group by ol.Sales_Order_Id,
+--     ol.customer_id
+-- )
+-- -- select * from sales_data
+-- -- where  Sales_Order_Id = '861196706361521705'
+
+-- -- -- Final SELECT with the adjusted flag logic
+-- SELECT
+--   s.Customer_Id,
+--   s.* except(Customer_Id,order_line),
+--   msr.order_line,
+--   -- msr.order_line,
+--   msr.flag,
+--   CASE
+--     WHEN msr.flag <> 1 THEN DENSE_RANK() OVER (PARTITION BY s.customer_id, (msr.flag <> 1) ORDER BY s.order_date,s.Sales_Order_Id)
+--     ELSE NULL
+--   END AS sales_order
+-- FROM ${ref("FACT_SALES_CORRECTED")} s
+-- inner JOIN sales_data msr ON s.Sales_Order_Id = msr.Sales_Order_Id 
+
+-- ORDER BY
+--   s.customer_id,
+--   s.order_date
+
+
+
+-- V2 ##########################
+-- with sales as (
+--   SELECT
+--     sales.Sales_Order_Id,
+--     sales.sources,
+--     sales.invoice_id,
+--     sales.source_customer_id,
+--     sales.store_code,
+--     sales.currency_id,
+--     sales.country_delivery_id,
+--     sales.order_date,
+--     sales.invoice_date,
+--     sales.export_date,
+--     sales.cashier,
+--     sales.order_status,
+--     sales.shipping_status,
+--     sales.financed_order,
+--     sales.Billing_Address,
+--     sales.Shipping_Address,
+--     sales.order_line,
+--     cust.Customer_Id as Customer_Id
+--   FROM
+--     ${ref("AGG_SALES")} sales
+--   LEFT JOIN (
+--     SELECT
+--       distinct Customer_Id,
+--       Source_Customer_Id
+--     FROM
+--       ${ref("WRK_CUSTOMER_METRICS_PREP")},
+--       UNNEST(Sources)
+--     WHERE
+--       Source_Customer_Id IS NOT NULL
+--       AND Source_Customer_Id != ''
+--   ) cust
+--   ON
+--     sales.source_customer_id = cust.Source_Customer_Id
+-- ),
+-- combined as (
+--   SELECT
+--     *,
+--     'source' as data_source
+--   FROM
+--     sales
+--   UNION ALL
+--   SELECT
+--     * ,
+--     'destination' as data_source
+--   FROM
+--     ${self()}
+-- ),
+-- ranked as (
+--   SELECT
+--     *,
+--     ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id, store_code, order_date, invoice_date ORDER BY export_date DESC) as rn
+--   FROM
+--     combined
+-- )
+-- SELECT
+--   Sales_Order_Id,
+--   sources,
+--   invoice_id,
+--   source_customer_id,
+--   store_code,
+--   currency_id,
+--   country_delivery_id,
+--   order_date,
+--   invoice_date,
+--   export_date,
+--   cashier,
+--   order_status,
+--   shipping_status,
+--   financed_order,
+--   Billing_Address,
+--   Shipping_Address,
+--   order_line,
+--   Customer_Id
+-- FROM
+--   ranked
+-- WHERE
+--   rn = 1
+-- V1 #####
+-- config {
+--   type: "incremental",
+--   schema: "facts",
+--   name: "FACT_SALES",
+
+--   tags: ["dimensions", "SALES","cust_without_dudup"],
+--     uniqueKey : ["Sales_Order_Id","invoice_id","source_customer_id","store_code","currency_id","country_delivery_id","order_date","invoice_date","invoice_date","Customer_Id","fingerprint"]
+
+-- }
+-- with sales as (
+-- SELECT
+--   sales.Sales_Order_Id,
+-- sales.sources,
+-- sales.invoice_id,
+-- sales.source_customer_id,
+-- sales.store_code,
+-- sales.currency_id,
+-- sales.country_delivery_id,
+-- sales.order_date,
+-- sales.invoice_date,
+-- sales.export_date,
+-- sales.cashier,
+-- sales.order_status,
+-- sales.shipping_status,
+-- sales.financed_order,
+-- sales.Billing_Address,
+-- sales.Shipping_Address,
+-- sales.order_line,
+-- cust.Customer_Id as Customer_Id,
+
+-- FARM_FINGERPRINT(TO_JSON_STRING(STRUCT(
+--   CAST(sales.Sales_Order_Id AS STRING) AS Sales_Order_Id,
+--   ARRAY_TO_STRING(ARRAY(SELECT TO_JSON_STRING(t) FROM UNNEST(sources) t), ',') AS sources,
+--   CAST(invoice_id AS STRING) AS invoice_id,
+--   CAST(cust.source_customer_id AS STRING) AS source_customer_id,
+--   CAST(sales.store_code AS STRING) AS store_code,
+--   CAST(sales.currency_id AS STRING) AS currency_id,
+--   CAST(sales.country_delivery_id AS STRING) AS country_delivery_id,
+--   CAST(sales.order_date AS STRING) AS order_date,
+--   CAST(sales.invoice_date AS STRING) AS invoice_date,
+--   CAST(sales.export_date AS STRING) AS export_date,
+--   CAST(sales.cashier AS STRING) AS cashier,
+--   CAST(sales.order_status AS STRING) AS order_status,
+--   CAST(sales.shipping_status AS STRING) AS shipping_status,
+--   CAST(sales.financed_order AS STRING) AS financed_order,
+--   ARRAY_TO_STRING(ARRAY(SELECT TO_JSON_STRING(t) FROM UNNEST(Billing_Address) t), ',') AS Billing_Address_string,
+--   ARRAY_TO_STRING(ARRAY(SELECT TO_JSON_STRING(t) FROM UNNEST(Shipping_Address) t), ',') AS Shipping_Address_string,
+--   TO_JSON_STRING(order_line) AS order_line_json, -- Assuming order_line can be directly serialized
+--   CAST(cust.Customer_Id AS STRING) AS Customer_Id
+-- ))) AS fingerprint
+-- FROM
+--   ${ref("AGG_SALES")} sales
+-- LEFT JOIN (
+--   SELECT
+--     distinct Customer_Id,
+--     Source_Customer_Id
+--   FROM
+--     ${ref("WRK_CUSTOMER_METRICS_PREP")},
+--     UNNEST(Sources)
+--   WHERE
+--     Source_Customer_Id IS NOT NULL
+--     AND Source_Customer_Id != ''
+-- ) cust
+-- ON
+--   sales.source_customer_id = cust.Source_Customer_Id
+
+-- -- WHERE export_date > IFNULL((SELECT MAX(export_date) FROM `mja-us-prj-dpf-ing-01-ppd.facts.FACT_SALES`), '1000-01-01')
+-- )
+
+-- SELECT 
+-- sales.Sales_Order_Id,
+-- sales.sources,
+-- sales.invoice_id,
+-- sales.source_customer_id,
+-- sales.store_code,
+-- sales.currency_id,
+-- sales.country_delivery_id,
+-- sales.order_date,
+-- sales.invoice_date,
+-- sales.export_date,
+-- sales.cashier,
+-- sales.order_status,
+-- sales.shipping_status,
+-- sales.financed_order,
+-- sales.Billing_Address,
+-- sales.Shipping_Address,
+-- sales.order_line,
+-- sales.Customer_Id,
+-- sales.fingerprint
+-- FROM sales
+ 
+-- ${when(incremental(), `
+--     LEFT JOIN 
+--      ${self()}
+--     destination ON destination.Sales_Order_Id = sales.Sales_Order_Id 
+--     WHERE IFNULL(destination.fingerprint,0) <> sales.fingerprint
+-- `)}
+
+
+

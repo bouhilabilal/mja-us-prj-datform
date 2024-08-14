@@ -1,0 +1,64 @@
+config {
+  type: "incremental",
+  schema: "datalake", // A more descriptive dataset name
+  name: "DL_PRICES",
+uniqueKey: ["unique_key"],
+  tags: ["datalake", "PRICES"]
+  
+}
+--  
+
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+
+--fixed and add unique key 
+--bilal 17-04-2024
+with SA_with_hash as 
+(SELECT
+distinct
+price_id,
+price_type,
+price_value,
+store_type,
+product_color_id,
+currency_code,
+CONCAT(
+COALESCE(cast(price_id as string), ''), 
+COALESCE(cast(price_type as string), ''), 
+COALESCE(cast(price_value as string), ''), 
+COALESCE(cast(store_type as string), ''), 
+COALESCE(cast(product_color_id as string), ''), 
+COALESCE(cast(currency_code as string), '')
+  ) as unique_key,
+TO_HEX(MD5(CONCAT(
+COALESCE(cast(price_id as string), ''), 
+COALESCE(cast(price_type as string), ''), 
+COALESCE(cast(price_value as string), ''), 
+COALESCE(cast(store_type as string), ''), 
+COALESCE(cast(product_color_id as string), ''), 
+COALESCE(cast(currency_code as string), '')
+  ))) AS row_hash
+FROM
+mja_us_bqd_dpf_anp_01_${env_prefix}.ANP_PRICES)
+
+  select 
+  distinct
+ori.price_id,
+ori.price_type,
+ori.price_value,
+ori.store_type,
+ori.product_color_id,
+ori.currency_code,
+ori.row_hash,
+ori.unique_key,
+
+from 
+    SA_with_hash ori
+  
+  ${when(incremental(), `
+    LEFT JOIN ${self()} destination on destination.price_id = ori.price_id
+    WHERE ifnull(destination.row_hash,'') <> ori.row_hash
+`) }

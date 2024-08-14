@@ -1,0 +1,354 @@
+config {
+    type: "table",
+    schema: "dimensions",
+    name: "CUSTOMERS_WITHOUT_SALES",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+
+
+WITH Agg_Customers AS (
+select 
+  customers.Customer_Id,
+  customers.Sources,
+  customers.Last_Name,
+  customers.First_Name,
+  customers.Middle_Name,
+  customers.Email,
+  customers.Phone,
+  customers.fictitious_customer,
+  customers.Prefered_Postal_Address,
+  customers.Language,
+  customers.Nationality,
+  customers.Birthdate,
+  customers.Age,
+  customers.Age_Range,
+  customers.Salutation,
+  case when customers.Salutation_Gender = '' then null 
+  else customers.Salutation_Gender END
+  as Salutation_Gender,
+  case when customers.prospect then NULL else customers.Main_Store_Id end as Main_Store_Id,
+  customers.prospect,
+  case when prospect then 'Prospect' else customers.customer_attrition end as customer_attrition,
+  case when prospect then 'Prospect' else customers.customer_repetition end customer_repetition,
+--   case WHEN customers.customer_segmentation is null  then 'prospect' else customers.customer_segmentation end as customer_segmentation,
+  case when customers.prospect then NULL   else  customers.customer_segmentation end as customer_segmentation,
+   case when customers.prospect then NULL else   customers.current_segment end as current_segment,
+--   customers.current_segment ,
+  case when customers.prospect then NULL else  customers.segment_last12to24m_name end as segment_last12to24m_name,
+  case when customers.prospect then NULL else customers.previous_rfm_segment  end as previous_rfm_segment,
+  case when customers.prospect then NULL else customers.segment_evolution end as segment_evolution,
+  case when customers.prospect then NULL else customers.highest_segment end as highest_segment,
+  case when customers.prospect then NULL else customers.date_of_highest_segment end as date_of_highest_segment,
+  customers.Account_Creation_Date,
+  case when customers.prospect then NULL else customers.First_Order_Date end as First_Order_Date,
+  case when customers.prospect then NULL else customers.Last_Order_Date end as Last_Order_Date,
+  customers.Last_Activity_Date,
+  customers.Last_Modified_Date,
+  customers.Last_Viewed_Date,
+  customers.Retention_Date,
+  customers.consent_homephone_code,
+  customers.consent_homephone,
+  customers.consent_officephone_code,
+  customers.consent_officephone,
+  customers.consent_cellphone_code,
+  customers.consent_cellphone,
+  customers.consent_email1_code,
+  customers.consent_email1,
+  customers.consent_email2_code,
+  customers.consent_email2,
+  customers.Contactability,
+  case when customers.prospect then NULL 
+   when customers.Active is null then false
+   else customers.Active END as Active ,
+-- customers.Active,
+  case when customers.prospect then NULL else customers.date_of_rfm end as date_of_rfm,
+  case when customers.prospect then 0 else customers.nb_lifetime_transactions end as nb_lifetime_transactions,
+  case when customers.prospect then 0 else customers.nb_transactions_last12m end as nb_transactions_last12m,
+  case when customers.prospect then 0 else customers.nb_transactions_last12to24m end as nb_transactions_last12to24m,
+  case when customers.prospect then 0 else customers.nb_transactions_last24m end as nb_transactions_last24m,
+  case when customers.prospect then 0 else customers.nb_lifetime_units end as nb_lifetime_units,
+  customers.Date_Of_Acceptance,
+  customers.Date_Of_Opt_In_Update,
+  customers.Privacy_Policy_Signed,
+  customers.Customer_Type, 
+  case when customers.prospect then NULL else customers.Customer_Channel end as Customer_Channel,
+  case when customers.prospect then NULL else customers.Type_of_buyer end as Type_of_buyer, 
+  customers.Privacy_Policy_Acceptance,
+  case when customers.prospect then NULL else customers.Local_Client end as Local_Client,
+  customers.Sales_Associate,
+  customers.Master_Record_Id,
+  case when customers.prospect then 0 else customers.nb_units_last12m end as nb_units_last12m, 
+  case when customers.prospect then 0 else customers.nb_units_last12to24m end as nb_units_last12to24m, 
+  case when customers.prospect then 0 else customers.nb_units_last24m end as nb_units_last24m, 
+  customers.full_unit_per_ticket, 
+  customers.last_12m_unit_per_ticket, 
+  customers.last_12to24m_unit_per_ticket, 
+  customers.last_24m_unit_per_ticket, 
+  case when customers.prospect then 0 else customers.Global_LTV end as Global_LTV, 
+  case when customers.prospect then 0 else customers.Last_12M_LTV end as Last_12M_LTV, 
+  case when customers.prospect then 0 else customers.Last_12M_LTV_TI end as Last_12M_LTV_TI, 
+  case when customers.prospect then 0 else customers.Last_12Mto24M_LTV end as Last_12Mto24M_LTV, 
+  case when customers.prospect then 0 else customers.Last_12Mto24M_LTV_TI end as Last_12Mto24M_LTV_TI, 
+  case when customers.prospect then 0 else  customers.Last_24M_LTV end as Last_24M_LTV, 
+  case when customers.prospect then 0 else customers.Last_24M_LTV_TI end as Last_24M_LTV_TI, 
+  case when customers.prospect then 0 else customers.full_avg_basket end as full_avg_basket, 
+  case when customers.prospect then 0 else customers.avg_basket_last12m end as avg_basket_last12m, 
+  case when customers.prospect then 0 else customers.avg_basket_last12m_ti end as avg_basket_last12m_ti, 
+  case when customers.prospect then 0 else customers.avg_basket_last_12to24m end as avg_basket_last_12to24m, 
+  case when customers.prospect then 0 else customers.avg_basket_last_12to24m_ti end as avg_basket_last_12to24m_ti,  
+  case when customers.prospect then 0 else customers.avg_basket_last_24m end as avg_basket_last_24m, 
+  case when customers.prospect then 0 else customers.avg_basket_last_24m_ti end as avg_basket_last_24m_ti, 
+  case when customers.prospect then 0 else customers.full_avg_unit_price end as full_avg_unit_price, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12m end as avg_unit_price_last12m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12m_ti end as avg_unit_price_last12m_ti, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last24m end as avg_unit_price_last24m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last24m_ti end as avg_unit_price_last24m_ti, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12to24m end as avg_unit_price_last12to24m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12to24m_ti end as avg_unit_price_last12to24m_ti, 
+  case when delete_cust.Email is not null and customers.prospect = true then true else false end as deleted_cust
+  
+ from ${ref("AGG_CUSTOMERS_COMBINED_KPI")} customers
+ left join manual_files.customers_to_delete delete_cust
+ on UPPER(customers.Email[SAFE_OFFSET(0)].value) = upper( delete_cust.Email)
+ where Destination = 'cusomers_without_sales'
+ ),
+Non_Matching_Customers AS (
+
+  SELECT
+    di.* except (deleted_cust),
+    case when delete_cust.Email is not null and di.prospect = true then true else false end as deleted_cust
+  FROM dimensions.CUSTOMERS_WITHOUT_SALES di
+  left join ${ref("AGG_CUSTOMERS_COMBINED_KPI")} dest
+    on dest.Customer_Id = di.Customer_Id and Destination = 'di_customers'
+  LEFT JOIN Agg_Customers agg
+    ON di.Customer_Id = agg.Customer_Id
+  LEFT JOIN manual_files.customers_to_delete delete_cust
+    on UPPER(di.Email[SAFE_OFFSET(0)].value) = upper( delete_cust.Email)
+  WHERE agg.Customer_Id IS NULL
+  and dest.Customer_Id IS NULL
+  )
+
+SELECT * FROM Non_Matching_Customers
+UNION ALL
+SELECT * FROM Agg_Customers
+
+--  ${when(incremental(), `
+--     LEFT JOIN ${self()} destination on destination.Customer_Id= customers.Customer_Id
+--     WHERE ifnull(destination.fingerprint,0) <> customers.fingerprint
+-- `) }
+
+-- with customers as 
+-- (SELECT
+--   CustConsent.Customer_Id  as Customer_Id,
+--   Sources,
+--   Last_Name,
+--   First_Name,
+--   Middle_Name,
+--   Email,
+--   Phone,
+--   fictitious_customer,
+--   Prefered_Postal_Address,
+--   LANGUAGE as Language,
+--   Nationality,
+--   Birthdate,
+--   Age,
+--   Age_Range,
+--   Salutation,
+--   Salutation_Gender,
+--   Main_Store_Id,
+--   prospect,
+--   customer_attrition ,
+--   customer_segmentation,
+--   current_segment ,
+--   segment_last12to24m_name,
+--   CustMetric.previous_rfm_segment,
+--   segment_evolution,
+--   highest_segment,
+--   date_of_highest_segment,
+--   Account_Creation_Date,
+--   First_Order_Date,
+--   Last_Order_Date,
+--   Last_Activity_Date,
+--   Last_Modified_Date,
+--   Last_Viewed_Date,
+--   Retention_Date,
+--   consent_homephone_code,
+--   consent_homephone,
+--   consent_officephone_code,
+--   consent_officephone,
+--   consent_cellphone_code,
+--   consent_cellphone,
+--   consent_email1_code,
+--   consent_email1,
+--   consent_email2_code,
+--   consent_email2,
+--   Contactability,
+--   Active,
+--   date_of_rfm,
+--   nb_lifetime_transactions,
+--   history_transactions,
+--   nb_transactions_last12m,
+--   nb_transactions_last12to24m,
+--   nb_transactions_last24m,
+--   nb_lifetime_units,
+--   Date_Of_Acceptance,
+--   Date_Of_Opt_In_Update,
+--   Privacy_Policy_Signed,
+--   Customer_Type, 
+--   CASE
+--     WHEN EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id = 'sfcc') AND NOT EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id LIKE 'y2') THEN 'eCommerce'
+--     WHEN EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id LIKE 'y2') AND NOT EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id = 'sfcc') THEN 'Store'
+--     ELSE 'Mix'
+--   END AS Customer_Channel,
+--   Type_of_buyer, 
+--   Privacy_Policy_Acceptance,
+--   Local_Client,
+--   Sales_Associate,
+--   Master_Record_Id,
+--   nb_units_last12m, 
+--   nb_units_last12to24m, 
+--   nb_units_last24m, 
+--   full_unit_per_ticket, 
+--   last_12m_unit_per_ticket, 
+--   last_12to24m_unit_per_ticket, 
+--   last_24m_unit_per_ticket, 
+--   Global_LTV, 
+--   Last_12M_LTV, 
+--   Last_12M_LTV_TI, 
+--   Last_12Mto24M_LTV, 
+--   Last_12Mto24M_LTV_TI, 
+--   Last_24M_LTV, 
+--   Last_24M_LTV_TI, 
+--   full_avg_basket, 
+--   avg_basket_last12m, 
+--   avg_basket_last12m_ti, 
+--   avg_basket_last_12to24m, 
+--   avg_basket_last_12to24m_ti,  
+--   avg_basket_last_24m, 
+--   avg_basket_last_24m_ti, 
+--   full_avg_unit_price, 
+--   avg_unit_price_last12m, 
+--   avg_unit_price_last12m_ti, 
+--   avg_unit_price_last24m, 
+--   avg_unit_price_last24m_ti, 
+--   avg_unit_price_last12to24m, 
+--   avg_unit_price_last12to24m_ti, 
+  
+-- FROM
+--   ${ref("AGG_CUSTOMER_CONSENT")} CustConsent
+
+-- LEFT JOIN
+--   ${ref("AGG_CUSTOMER_SEGMENTATION")} CustMetric
+-- ON
+--   CustConsent.customer_id = CustMetric.golden_id
+-- LEFT JOIN
+--   ${ref("AGG_CUSTOMER_SEGMENTATION_HISTORY")} CustMetric2
+-- ON
+--   CustConsent.customer_id = CustMetric2.golden_id
+-- LEFT JOIN
+--   ${ref("AGG_CUSTOMER_ORDER_METRICS")} ct1
+-- ON
+--   ct1.golden_id = CustConsent.customer_id
+-- LEFT JOIN
+--   ${ref("AGG_CUSTOMER_INFO_SUMMARY")} ct2
+-- ON
+--   ct2.golden_id = CustConsent.customer_id)
+-- select 
+--     Customer_Id ,
+--   Sources,
+--   Last_Name,
+--   First_Name,
+--   Middle_Name,
+--   Email,
+--   Phone,
+--   fictitious_customer,
+--   Prefered_Postal_Address,
+--   Language,
+--   Nationality,
+--   Birthdate,
+--   Age,
+--   Age_Range,
+--   Salutation,
+--   Salutation_Gender,
+  
+--   Main_Store_Id,
+--   prospect,
+--   customer_attrition ,
+--   customer_segmentation,
+--   current_segment ,
+--   segment_last12to24m_name,
+--   previous_rfm_segment,
+--   segment_evolution,
+--   highest_segment,
+--   date_of_highest_segment,
+
+--   Account_Creation_Date,
+--   First_Order_Date,
+--   Last_Order_Date,
+--   Last_Activity_Date,
+--   Last_Modified_Date,
+--   Last_Viewed_Date,
+--   Retention_Date,
+
+--   consent_homephone_code,
+--   consent_homephone,
+--   consent_officephone_code,
+--   consent_officephone,
+--   consent_cellphone_code,
+--   consent_cellphone,
+--   consent_email1_code,
+--   consent_email1,
+--   consent_email2_code,
+--   consent_email2,
+--   Contactability,
+
+--   Active,
+--   date_of_rfm,
+--   nb_lifetime_transactions,
+--   nb_transactions_last12m,
+--   nb_transactions_last12to24m,
+--   nb_transactions_last24m,
+--   nb_lifetime_units,
+
+--   Date_Of_Acceptance,
+--   Date_Of_Opt_In_Update,
+--   Privacy_Policy_Signed,
+--   Customer_Type, 
+--   Customer_Channel,
+--   Type_of_buyer, 
+--   Privacy_Policy_Acceptance,
+--   Local_Client,
+--   Sales_Associate,
+--   Master_Record_Id,
+--   nb_units_last12m, 
+--   nb_units_last12to24m, 
+--   nb_units_last24m, 
+--   full_unit_per_ticket, 
+--   last_12m_unit_per_ticket, 
+--   last_12to24m_unit_per_ticket, 
+--   last_24m_unit_per_ticket, 
+--   Global_LTV, 
+--   Last_12M_LTV, 
+--   Last_12M_LTV_TI, 
+--   Last_12Mto24M_LTV, 
+--   Last_12Mto24M_LTV_TI, 
+--   Last_24M_LTV, 
+--   Last_24M_LTV_TI, 
+--   full_avg_basket, 
+--   avg_basket_last12m, 
+--   avg_basket_last12m_ti, 
+--   avg_basket_last_12to24m, 
+--   avg_basket_last_12to24m_ti,  
+--   avg_basket_last_24m, 
+--   avg_basket_last_24m_ti, 
+--   full_avg_unit_price, 
+--   avg_unit_price_last12m, 
+--   avg_unit_price_last12m_ti, 
+--   avg_unit_price_last24m, 
+--   avg_unit_price_last24m_ti, 
+--   avg_unit_price_last12to24m, 
+--   avg_unit_price_last12to24m_ti, 
+
+-- from customers
+-- where history_transactions is  null
+-- and Account_Creation_Date < '2020-01-01'

@@ -1,0 +1,155 @@
+config {
+  type: "table",
+  schema: "work",
+  name: "WRK_SALES",
+    tags: ["dimensions", "SALES","cust_without_dudup"]
+}
+with ids as (
+SELECT
+  Sources_Source_Sales_Order_Id,
+  store_code,
+  source_customer_id,
+  ARRAY_AGG(STRUCT(Source_Id, Sales_Order_Id)) AS sources
+FROM (
+  SELECT DISTINCT
+    Sources_Source_Sales_Order_Id,
+    store_code,
+    source_customer_id,
+    Sources_Source_Id AS Source_Id,
+    Sources_Source_Sales_Order_Id AS Sales_Order_Id
+  FROM
+       ${ref("INT_SALES")}
+  WHERE
+    order_line_product_id IS NOT NULL
+)
+GROUP BY
+  Sources_Source_Sales_Order_Id,
+  store_code,
+  source_customer_id
+
+), sales as 
+(SELECT
+  cast( ABS(FARM_FINGERPRINT(CONCAT(IFNULL(ist.Sources_Source_Sales_Order_Id, ''), IFNULL(ist.store_code, ''),IFNULL(ist.source_customer_id, ''),IFNULL(ist.invoice_date, '1999-01-01')))) as string) AS Sales_Order_Id,
+  ist.Sources_Source_Sales_Order_Id,
+  invoice_id,
+  ist.source_customer_id,
+  ist.store_code,
+  MAX(currency_id) AS currency_id,
+  MAX(country_delivery_id) AS country_delivery_id,
+  MAX(order_date) AS order_date,
+  MAX(invoice_date) AS invoice_date,
+  MAX(export_date) AS export_date,
+  MAX(cashier) AS cashier,
+  MAX(order_status) AS order_status,
+  MAX(shipping_status) AS shipping_status,
+  MAX(financed_order) AS financed_order,
+  ARRAY_AGG(STRUCT(Billing_Address_Address AS Address,
+  Billing_Address_ZipCode as ZipCode,
+  Billing_Address_City as City,
+  Billing_Address_State as State,
+  Billing_Address_countryID as CountryID,
+  Billing_Address_Country_Name as Country_Name,
+  Billing_Address_Phone_Number as Phone_Number
+  )ORDER BY Billing_Address_Address,
+            Billing_Address_ZipCode,
+            Billing_Address_City,
+            Billing_Address_State,
+            Billing_Address_countryID,
+            Billing_Address_Phone_Number
+   ) AS Billing_Address,
+  MAX(Billing_Address_Address) as Billing_Address_Address,
+  MAX(Billing_Address_ZipCode) as Billing_Address_ZipCode,
+  MAX(Billing_Address_City) as Billing_Address_City,
+  MAX(Billing_Address_State) as Billing_Address_State,
+  MAX(Billing_Address_countryID) as Billing_Address_countryID,
+  MAX(Billing_Address_Country_Name) as Billing_Address_Country_Name,
+  case when MAX(Billing_Address_Phone_Number) is null then  MAX(Shipping_Address_Phone_Number) else  MAX(Billing_Address_Phone_Number) end as Billing_Address_Phone_Number,
+  ARRAY_AGG(STRUCT(Shipping_Address_Address as Address,
+  Shipping_Address_ZipCode as ZipCode,
+  Shipping_Address_City as City,
+  Shipping_Address_State as State,
+  Shipping_Address_countryID as CountryID,
+  Shipping_Address_Country_Name as Country_Name,
+  Shipping_Address_Phone_Number  as Phone_Number
+  )ORDER BY Shipping_Address_Address,
+            Shipping_Address_ZipCode,
+            Shipping_Address_City,
+            Shipping_Address_State,
+            Shipping_Address_countryID,
+            Shipping_Address_Country_Name,
+            Shipping_Address_Phone_Number
+  ) AS Shipping_Address,
+  ARRAY_AGG(STRUCT(order_line_order_line_id AS order_line_id,
+      sales_advisor_id,
+      order_line_product_id AS product_id,
+        case when upper(transaction_type) is null then upper(order_line_transaction_type) else upper(transaction_type) end as transaction_type	,
+        order_line_return_reason_code as return_reason_code,
+      order_line_product_markdown AS product_markdown,
+      discount_type,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN' then ABS(order_line_quantity)*-1 else order_line_quantity END AS quantity,
+
+      -- order_line_quantity AS quantity,
+      order_line_tax_rate AS tax_rate,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_te_turnover)*-1 else order_line_te_turnover END AS te_turnover,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_te_turnover_full_price) *-1 else order_line_te_turnover_full_price END AS te_turnover_full_price,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_ti_turnover) *-1 else order_line_ti_turnover END AS ti_turnover,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_ti_turnover_full_price) *-1 else order_line_ti_turnover_full_price END AS ti_turnover_full_price,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_te_amount_discount) *-1 else order_line_te_amount_discount END AS te_amount_discount,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_te_amount_markdown) *-1 else order_line_te_amount_markdown END AS te_amount_markdown,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_ti_amount_discount) *-1 else order_line_ti_amount_discount END AS ti_amount_discount,
+      case when upper(order_line_transaction_type) = 'RETURN' or transaction_type = 'RETURN' or upper(order_line_transaction_type) = 'REFUND' or transaction_type = 'RETURN'   then ABS(order_line_ti_amount_markdown) *-1 else order_line_ti_amount_markdown END AS ti_amount_markdown,
+      null as return_flag)
+      ORDER BY order_line_order_line_id,
+                order_line_product_id,
+                order_line_return_reason_code,
+                order_line_product_markdown,
+                discount_type,
+                order_line_quantity,
+                order_line_transaction_type
+
+      ) AS order_line,
+      
+FROM
+      ${ref("INT_SALES")} ist
+   
+   where order_line_product_id is not null
+GROUP BY
+  Sources_Source_Sales_Order_Id,
+  invoice_id,
+  source_customer_id,
+  store_code,
+  Sales_Order_Id)
+  
+  
+  
+  select 
+  Sales_Order_Id,
+  sources,
+  invoice_id,
+  ist.source_customer_id,
+  ist.store_code,
+  currency_id,
+  country_delivery_id,
+  order_date,
+  invoice_date,
+  export_date,
+  cashier,
+  order_status,
+  shipping_status,
+  financed_order,
+  Billing_Address,
+  Billing_Address_Address,
+  Billing_Address_ZipCode,
+  Billing_Address_City,
+  Billing_Address_State,
+  Billing_Address_countryID,
+  Billing_Address_Country_Name,
+  Billing_Address_Phone_Number,
+  Shipping_Address,
+  order_line,
+      
+   from sales ist
+  inner join ids
+   on ids.Sources_Source_Sales_Order_Id = ist.Sources_Source_Sales_Order_Id
+   and ids.store_code = ist.store_code
+   and ids.source_customer_id = ist.source_customer_id

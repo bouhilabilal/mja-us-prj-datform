@@ -1,0 +1,19 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_COSTS",
+    tags: ["dimensions", "initialization","COSTS"]
+}
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+SELECT
+product_color_id,
+ currency_code,
+ cost_id,
+ cast (cost_value as Float64) as cost_value,
+ company_code
+FROM
+  mja_us_bqd_dpf_datahub_01_${env_prefix}.DATAHUB_COSTS

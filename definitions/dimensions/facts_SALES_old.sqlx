@@ -1,0 +1,25 @@
+config {
+  type: 'table',
+  schema: "aggregates",
+  name: "FACT_SALES_CORRECTED",
+  tags: ["dimensions", "SALES", "cust_without_dudup"]
+}
+
+WITH distinct_customers AS (
+  SELECT DISTINCT
+    Customer_Id,
+    Source_Customer_Id
+  FROM ${ref("WRK_CUSTOMER_METRICS_PREP")}
+  LEFT JOIN UNNEST(Sources)
+)
+
+
+SELECT 
+  COALESCE(ref.Customer_Id, sales.Customer_Id) AS Customer_Id,
+  sales.* EXCEPT(Customer_Id)
+FROM 
+  ${ref("AGG_SALES_GROUPED")} sales 
+LEFT JOIN 
+  distinct_customers ref
+ON 
+  sales.source_customer_id = ref.Source_Customer_Id

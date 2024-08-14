@@ -1,0 +1,32 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMERS_CHANNEL",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+WITH promos as 
+    (SELECT 
+    distinct Customer_Id,STRING_AGG(DISTINCT store.store_type, ', ') AS store_types,
+    FROM ${ref("FACT_SALES")} c
+    LEFT JOIN
+    `dimensions.DI_STORES` store ON c.store_code = store.store_code
+    WHERE Customer_Id IS NOT NULL
+    and  flag <>1
+    group by Customer_Id)
+
+SELECT
+  rs.Customer_Id,
+  -- MAX(has_recent_transaction) AS Active,
+  CASE
+    WHEN store_types = 'FULL PRICE' THEN 'Full Price'
+    WHEN store_types = 'OFF PRICE' THEN 'Off price'
+    WHEN store_types IN ('FULL PRICE, OFF PRICE', 'OFF PRICE, FULL PRICE') THEN 'Store'
+    WHEN store_types = 'ECOMMERCE' THEN 'eCommerce'
+    WHEN store_types LIKE '%ECOMMERCE%' AND (store_types LIKE '%FULL PRICE%' OR store_types LIKE '%OFF PRICE%') THEN 'Mix'
+    ELSE 'Other'
+  END AS Customer_Channel,
+FROM
+  promos rs
+
+GROUP BY
+  rs.Customer_Id, store_types

@@ -1,0 +1,79 @@
+
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_golden_id_attributed",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
+    dependencies :["WRK_GOLDEN_ID_REF"]
+
+}
+
+-- part 6 GOLDEN_ID_golden_id_attributed
+
+  with golden_id_attributed AS (
+  SELECT
+    COALESCE(golden_id, MAX(golden_id) OVER() + row_num) AS golden_id,
+    temp_id,
+    pos_id,
+    ecom_id
+  FROM
+   ${ref("GOLDEN_ID_match_ref_temp_full_info")}  )
+  SELECT
+    g.golden_id,
+    g.pos_id,
+    g.ecom_id,
+    m.pos_created_by_id,
+    m.ecom_created_by_id,
+    m.last_name,
+    m.middle_name,
+    m.first_name,
+    m.email,
+    m.phone,
+    m.Sources_Source_Id,
+    m.Sources_Source_Customer_Id,
+    m.Sources_Account_id,
+    m.Email_main_email,
+    m.Email_source_id,
+    m.phone_main_phone,
+    m.Phone_source_id,
+    m.Phone_home_phone,
+    m.Phone_office_phone,
+    m.fictitious_customer,
+    m.Prefered_Postal_Address_Address,
+    m.Prefered_Postal_Address_ZipCode,
+    m.Prefered_Postal_Address_City,
+    m.Prefered_Postal_Address_State,
+    m.Prefered_Postal_Address_CountryId,
+    m.Prefered_Postal_Address_CountryName,
+    m.LANGUAGE,
+    m.Nationality,
+    m.birthdate,
+    m.Salutation,
+    m.Salutation_Gender,
+    m.Account_Creation_Date,
+    m.Last_Activity_Date,
+    m.Last_Viewed_Date,
+    m.Last_Modified_Date,
+    m.Customer_Type,
+    m.consent_homephone_code,
+    m.consent_officephone_code,
+    m.consent_cellphone_code,
+    m.consent_email1_code,
+    m.consent_email2_code,
+    -- m.Contactability_Email,
+    -- m.Contactability_Phone,
+    -- m.Contactability_Print,
+    m.Date_Of_Acceptance,
+    m.Date_Of_Opt_In_Update,
+    m.Privacy_Policy_Signed,
+    m.Privacy_Policy_Acceptance,
+    m.Sales_Associate,
+    m.Master_Record_Id,
+    m.last_update_date,
+    m.tech_golden_id
+  FROM
+       golden_id_attributed  g
+  INNER JOIN
+    ${ref("WRK_CUSTOMER_MERGE")} m
+  ON
+    g.temp_id = m.temp_id 

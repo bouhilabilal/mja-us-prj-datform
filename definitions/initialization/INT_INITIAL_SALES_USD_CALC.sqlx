@@ -1,0 +1,237 @@
+--Initial sales USD calculations
+
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_INITIAL_SALES_USD_CALC",
+    tags: ["dimensions","initialization", "CUSTOMERS", "calculated"]
+}
+
+
+WITH
+  combined_ids AS (
+  SELECT
+    DISTINCT golden_id,
+    source_customer_id
+  FROM (
+    SELECT
+      golden_id,
+      pos_id AS source_customer_id
+    FROM
+      ${ref("WRK_CUSTOMER_GOLDEN_ID")}
+    UNION ALL
+    SELECT
+      golden_id,
+      ecom_id AS source_customer_id
+    FROM
+      ${ref("WRK_CUSTOMER_GOLDEN_ID")}
+ )),
+  new_sales AS (
+  SELECT
+    sales.Sales_Order_Id,
+  
+    source.Source_Id AS source_Source_Id,
+    source.Sales_Order_Id AS source_Sales_Order_Id,
+    invoice_id,
+    sales.source_customer_id,
+    golden_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    'USD' AS new_currency_id,
+    country_delivery_id,
+    order_date,
+    invoice_date,
+    export_date,
+    discount_type,
+    cashier,
+    order_status,
+    shipping_status,
+    financed_order,
+    Billing_Address.Address AS Billing_Address_Address,
+    Billing_Address.ZipCode AS Billing_Address_ZipCode,
+    Billing_Address.City AS Billing_Address_City,
+    Billing_Address.State AS Billing_Address_State,
+    Billing_Address.CountryID AS Billing_Address_CountryID,
+    Billing_Address.Country_Name AS Billing_Address_Country_Name,
+    order_line.order_line_id,
+    order_line.transaction_type,
+    order_line.product_id,
+    product_markdown,
+    order_line.quantity,
+    order_line.tax_rate,
+    order_line.te_turnover,
+    te_turnover_full_price,
+    order_line.ti_turnover,
+    ti_turnover_full_price,
+    te_amount_discount,
+    te_amount_markdown,
+    ti_amount_discount,
+    ti_amount_markdown,
+    -- ExRateType,
+    -- FromCurrency,
+    -- ToCurrency,
+    -- ExRateDate,
+    -- ExRate,
+  FROM
+    -- datawarehouse.SALES sales,
+    ${ref("AGG_SALES")} sales,
+    UNNEST(sources) SOURCE,
+    UNNEST(Billing_Address) Billing_Address,
+    UNNEST(order_line) order_line
+  INNER JOIN
+    combined_ids
+  ON
+    combined_ids.source_customer_id = sales.source_customer_id),
+  old_sales AS (
+  SELECT
+    distinct sales.Sales_Order_Id,
+    source.Source_Id AS source_Source_Id,
+    source.Sales_Order_Id AS source_Sales_Order_Id,
+    invoice_id,
+    sales.source_customer_id,
+    sales.customer_id,
+    sales_advisor_id,
+    store_code,
+    currency_id,
+    'USD' AS new_currency_id,
+    country_delivery_id,
+    order_date,
+    invoice_date,
+    export_date,
+    discount_type,
+    cashier,
+    order_status,
+    shipping_status,
+    financed_order,
+    Billing_Address.Address AS Billing_Address_Address,
+    Billing_Address.ZipCode AS Billing_Address_ZipCode,
+    Billing_Address.City AS Billing_Address_City,
+    Billing_Address.State AS Billing_Address_State,
+    Billing_Address.CountryID AS Billing_Address_CountryID,
+    Billing_Address.Country_Name AS Billing_Address_Country_Name,
+    order_line.order_line_id,
+    order_line.transaction_type,
+    order_line.product_id,
+    product_markdown,
+    order_line.quantity,
+    order_line.tax_rate,
+    order_line.te_turnover,
+    te_turnover_full_price,
+    order_line.ti_turnover,
+    ti_turnover_full_price,
+    te_amount_discount,
+    te_amount_markdown,
+    ti_amount_discount,
+    ti_amount_markdown,
+    -- ExRateType,
+    -- FromCurrency,
+    -- ToCurrency,
+    -- ExRateDate,
+    -- ExRate,
+  FROM
+    facts.FACT_SALES sales,
+    UNNEST(sources) SOURCE,
+    UNNEST(Billing_Address) Billing_Address,
+    UNNEST(order_line) order_line
+  INNER JOIN
+    combined_ids
+  ON
+    --combined_ids.source_customer_id = sales.customer_id ) changed 24 avril
+    combined_ids.source_customer_id = sales.source_customer_id )
+
+SELECT
+  COALESCE(A.Sales_Order_Id, B.Sales_Order_Id) AS Sales_Order_Id,
+  COALESCE(A.source_Source_Id, B.source_Source_Id) AS source_Source_Id,
+  COALESCE(A.source_Sales_Order_Id, B.source_Sales_Order_Id) AS source_Sales_Order_Id,
+  COALESCE(A.invoice_id, B.invoice_id) AS invoice_id,
+  -- COALESCE(A.source_customer_id, B.customer_id) AS customer_id, changed 24 avril
+  COALESCE(A.source_customer_id, B.source_customer_id) AS customer_id,
+  COALESCE(A.golden_id, B.customer_id) AS golden_id,
+  COALESCE(A.sales_advisor_id, B.sales_advisor_id) AS sales_advisor_id,
+  COALESCE(A.store_code, B.store_code) AS store_code,
+  COALESCE(A.currency_id, B.currency_id) AS currency_id,
+  COALESCE(A.new_currency_id, B.new_currency_id) AS new_currency_id,
+  COALESCE(A.country_delivery_id, B.country_delivery_id) AS country_delivery_id,
+  COALESCE(A.order_date, B.order_date) AS order_date,
+  COALESCE(A.invoice_date, B.invoice_date) AS invoice_date,
+  max(COALESCE(A.export_date, B.export_date)) AS export_date,
+  COALESCE(A.discount_type, B.discount_type) AS discount_type,
+  COALESCE(A.cashier, B.cashier) AS cashier,
+  COALESCE(A.order_status, B.order_status) AS order_status,
+  COALESCE(A.shipping_status, B.shipping_status) AS shipping_status,
+  COALESCE(A.financed_order, B.financed_order) AS financed_order,
+  COALESCE(A.Billing_Address_Address, B.Billing_Address_Address) AS Billing_Address_Address,
+  COALESCE(A.Billing_Address_ZipCode, B.Billing_Address_ZipCode) AS Billing_Address_ZipCode,
+  COALESCE(A.Billing_Address_City, B.Billing_Address_City) AS Billing_Address_City,
+  COALESCE(A.Billing_Address_State, B.Billing_Address_State) AS Billing_Address_State,
+  COALESCE(A.Billing_Address_CountryID, B.Billing_Address_CountryID) AS Billing_Address_CountryID,
+  COALESCE(A.Billing_Address_Country_Name, B.Billing_Address_Country_Name) AS Billing_Address_Country_Name,
+  COALESCE(A.order_line_id, B.order_line_id) AS order_line_id,
+  COALESCE(A.transaction_type, B.transaction_type) AS transaction_type,
+  
+  COALESCE(A.product_id, B.product_id) AS product_id,
+  COALESCE(A.product_markdown, B.product_markdown) AS product_markdown,
+  COALESCE(A.quantity, B.quantity) AS quantity,
+  COALESCE(A.tax_rate, B.tax_rate) AS tax_rate,
+  COALESCE(A.te_turnover, B.te_turnover) AS te_turnover,
+  COALESCE(A.te_turnover_full_price, B.te_turnover_full_price) AS te_turnover_full_price,
+  COALESCE(A.ti_turnover, B.ti_turnover) AS ti_turnover,
+  COALESCE(A.ti_turnover_full_price, B.ti_turnover_full_price) AS ti_turnover_full_price,
+  COALESCE(A.te_amount_discount, B.te_amount_discount) AS te_amount_discount,
+  COALESCE(A.te_amount_markdown, B.te_amount_markdown) AS te_amount_markdown,
+  COALESCE(A.ti_amount_discount, B.ti_amount_discount) AS ti_amount_discount,
+  COALESCE(A.ti_amount_markdown, B.ti_amount_markdown) AS ti_amount_markdown,
+
+FROM
+  old_sales B
+FULL JOIN
+  new_sales A
+ON
+  B.Sales_Order_Id =A.Sales_Order_Id
+  AND B.source_Sales_Order_Id = A.source_Sales_Order_Id
+  -- AND B.customer_id = A.source_customer_id
+  -- AND B.source_customer_id = A.source_customer_id
+  AND B.sales_advisor_id = A.sales_advisor_id
+  AND B.order_date = A.order_date
+  AND B.export_date <= A.export_date
+GROUP BY 
+  Sales_Order_Id,
+  source_Source_Id,
+  source_Sales_Order_Id,
+  invoice_id,
+  customer_id,
+  golden_id,
+  sales_advisor_id,
+  store_code,
+  currency_id,
+  new_currency_id,
+  country_delivery_id,
+  order_date,
+  invoice_date,
+  -- export_date,
+  discount_type,
+  cashier,
+  order_status,
+  shipping_status,
+  financed_order,
+  Billing_Address_Address,
+  Billing_Address_ZipCode,
+  Billing_Address_City,
+  Billing_Address_State,
+  Billing_Address_CountryID,
+  Billing_Address_Country_Name,
+  order_line_id,
+  transaction_type,
+  product_id,
+  product_markdown,
+  quantity,
+  tax_rate,
+  te_turnover,
+  te_turnover_full_price,
+  ti_turnover,
+  ti_turnover_full_price,
+  te_amount_discount,
+  te_amount_markdown,
+  ti_amount_discount,
+  ti_amount_markdown

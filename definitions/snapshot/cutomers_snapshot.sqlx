@@ -1,0 +1,16 @@
+config {  
+ type: "incremental",
+    schema: "snapshot",
+    name: "CUSTOMERS_SNAPSHOT",
+     bigquery: {
+    partitionBy: "snapshot_date",
+    clusterBy: ["Customer_Id"]
+  },dependencies: [ "DI_CUSTOMERS" ],
+    tags: ["snapshot"]}
+
+select
+LAST_DAY(DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)) AS snapshot_date,
+*
+FROM dimensions.DI_CUSTOMERS
+
+${when(incremental(), `WHERE LAST_DAY(DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH)) > (SELECT MAX(snapshot_date) FROM ${self()})`) } 

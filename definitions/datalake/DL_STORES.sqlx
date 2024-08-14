@@ -1,0 +1,78 @@
+config {
+  type: "incremental",
+  schema: "datalake",
+  name: "DL_STORES",
+    tags: ["datalake", "STORES"]
+}
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+with SA_with_hash as 
+(SELECT
+*,
+TO_HEX(MD5(CONCAT(
+    COALESCE(store_code, ''),
+    COALESCE(store_name, ''),
+    COALESCE(location_name, ''),
+    COALESCE(street1, ''),
+    COALESCE(street2, ''),
+    COALESCE(street3, ''),
+    COALESCE(zip_code, ''),
+    COALESCE(city, ''),
+    COALESCE(State, ''),
+    COALESCE(area_id, ''),
+    COALESCE(area_name, ''),
+    COALESCE(country_id, ''),
+    COALESCE(country_name, ''),
+    COALESCE(zone_id, ''),
+    COALESCE(zone_name, ''),
+    COALESCE(store_type, ''),
+    COALESCE(cluster, ''),
+    COALESCE(distribution_type, ''),
+    COALESCE(market_name, ''),
+    COALESCE(storage_location_code, ''),
+    COALESCE(company_code, ''),
+    COALESCE(currency_key, ''),
+    COALESCE(opening_date, ''),
+    COALESCE(closing_date, '')
+  ))) AS row_hash
+
+FROM 
+mja_us_bqd_dpf_anp_01_${env_prefix}.ANP_STORES
+  ) 
+  
+  select 
+    ori.store_code,
+    ori.store_name,
+    ori.location_name,
+    ori.street1,
+    ori.street2,
+    ori.street3,
+    ori.zip_code,
+    ori.city,
+    ori.State,
+    ori.area_id,
+    ori.area_name,
+    ori.country_id,
+    ori.country_name,
+    ori.zone_id,
+    ori.zone_name,
+    ori.store_type,
+    ori.cluster,
+    ori.distribution_type,
+    ori.market_name,
+    ori.storage_location_code,
+    ori.company_code,
+    ori.currency_key,
+    ori.opening_date,
+    ori.closing_date,
+    ori.row_hash
+ from 
+  SA_with_hash ori
+  
+  ${when(incremental(), `
+    LEFT JOIN ${self()} destination on cast (destination.store_code as string ) = ori.store_code
+    WHERE ifnull(destination.row_hash,'') <> ori.row_hash
+`) }

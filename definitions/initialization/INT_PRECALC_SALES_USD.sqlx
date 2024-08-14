@@ -1,0 +1,79 @@
+--Preliminary calculations on sales in USD
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_PRECALC_SALES_USD",
+    tags: ["dimensions", "initialization","CUSTOMERS","calculated"]
+    }
+with golden_list as (
+  select distinct Customer_Id as new_golden,
+  source_customer_id 
+  from    ${ref("FACT_SALES")} 
+
+)
+
+SELECT
+  Sales_Order_Id,
+  source_Source_Id,
+  source_Sales_Order_Id,
+  invoice_id,
+  customer_id,
+  -- golden_id,
+  COALESCE(ng.new_golden, sales.golden_id) AS golden_id,
+  sales_advisor_id,
+  store_code,
+  currency_id,
+  new_currency_id,
+  country_delivery_id,
+  order_date,
+  invoice_date,
+  export_date,
+  discount_type,
+
+  cashier,
+  order_status,
+  shipping_status,
+  financed_order,
+  Billing_Address_Address,
+  Billing_Address_ZipCode,
+  Billing_Address_City,
+  Billing_Address_State,
+  Billing_Address_CountryID,
+  Billing_Address_Country_Name,
+  order_line_id,
+  transaction_type,
+  product_id,
+  product_markdown,
+  quantity,
+  tax_rate,
+  te_turnover,
+  te_turnover_full_price,
+  ti_turnover,
+  ti_turnover_full_price,
+  te_amount_discount,
+  te_amount_markdown,
+  ti_amount_discount,
+  ti_amount_markdown,
+  case when currency_id != 'USD' and ExRate is not null then te_turnover * ExRate else te_turnover END  AS te_turnover_usd,
+  case when currency_id != 'USD' and ExRate is not null then te_turnover_full_price * ExRate else te_turnover_full_price END  AS te_turnover_full_price_usd,
+  case when currency_id != 'USD' and ExRate is not null then ti_turnover * ExRate else ti_turnover END  AS ti_turnover_usd,
+  case when currency_id != 'USD' and ExRate is not null then ti_turnover_full_price * ExRate else ti_turnover_full_price END  AS ti_turnover_full_price_usd,
+  case when currency_id != 'USD' and ExRate is not null then te_amount_discount * ExRate else te_amount_discount END  AS te_amount_discount_usd,
+  case when currency_id != 'USD' and ExRate is not null then te_amount_markdown * ExRate else te_amount_markdown END  AS te_amount_markdown_usd,
+  case when currency_id != 'USD' and ExRate is not null then ti_amount_discount * ExRate else ti_amount_discount END  AS ti_amount_discount_usd,
+  case when currency_id != 'USD' and ExRate is not null then ti_amount_markdown * ExRate else ti_amount_markdown END  AS ti_amount_markdown_usd
+FROM
+   ${ref("INT_INITIAL_SALES_USD_CALC")} sales
+LEFT JOIN 
+  golden_list ng
+ON 
+  ng.source_customer_id = sales.customer_id
+LEFT JOIN
+  dimensions.DI_CURRENCY_RATES CR
+ON
+  ToCurrency = 'USD'
+  AND ExRateType = 'Default average rate'
+  AND FromCurrency = currency_id
+  AND ExRateDate = order_date
+  AND currency_id != 'USD'
+

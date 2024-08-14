@@ -1,0 +1,24 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_match_ref_temp_full_info",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
+    dependencies :["WRK_GOLDEN_ID_REF"]
+
+}
+-- part 5 GOLDEN_ID_match_ref_temp_full_info
+
+  SELECT
+    ROW_NUMBER() OVER(ORDER BY golden_id ) AS row_num,
+    golden_id,
+    temp.temp_id,
+    temp.pos_id,
+    temp.ecom_id
+  FROM
+    ${ref("GOLDEN_ID_match_ref_temp")} match
+  LEFT JOIN
+    ${ref("GOLDEN_ID_temp_id_source_grouped")} TEMP
+  ON
+    temp.temp_id = match.temp_id
+  ORDER BY
+    golden_id 

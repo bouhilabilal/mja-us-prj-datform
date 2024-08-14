@@ -1,0 +1,12 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_CUSTOMERS_SELF_Y2_FULL",
+    tags: ["dimensions", "CUSTOMERS", "duplicate"]
+}
+
+select * from 
+${ref("INT_CUSTOMERS_SELF_Y2")}
+union all 
+select * from 
+${ref("INT_CUSTOMERS_SELF_phone_Y2_without_sales")}

@@ -1,0 +1,24 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_temp_id_source_grouped",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
+    dependencies :["WRK_GOLDEN_ID_REF"]
+
+}
+-- part 1 GOLDEN_ID_temp_id_source_grouped
+
+SELECT
+    temp_id,
+    pos_id,
+    ecom_id,
+    ARRAY(SELECT pos_id UNION ALL SELECT ecom_id) as all_source_ids
+    FROM
+    ( SELECT
+    cm.temp_id,
+    case when pos is null then '' else pos end as pos_id,
+    case when ecom is null then '' else ecom end as ecom_id
+  FROM
+    ${ref("WRK_CUSTOMER_MERGE")} cm
+  LEFT JOIN UNNEST(cm.pos_id) pos ON TRUE
+  LEFT JOIN UNNEST(cm.ecom_id) ecom ON TRUE)

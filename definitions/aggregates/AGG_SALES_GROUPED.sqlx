@@ -1,0 +1,88 @@
+config {
+  type: 'table',
+  schema: "aggregates",
+  name: "AGG_SALES_GROUPED",
+  tags: ["dimensions", "SALES", "cust_without_dudup"]
+}
+
+with sales as (
+  SELECT
+    sales.Sales_Order_Id,
+    sales.sources,
+    sales.invoice_id,
+    sales.source_customer_id,
+    sales.store_code,
+    sales.currency_id,
+    sales.country_delivery_id,
+    sales.order_date,
+    sales.invoice_date,
+    sales.export_date,
+    sales.cashier,
+    sales.order_status,
+    sales.shipping_status,
+    sales.financed_order,
+    sales.Billing_Address,
+    sales.Shipping_Address,
+    sales.order_line,
+    cust.Customer_Id as Customer_Id
+  FROM
+    ${ref("AGG_SALES")} sales
+  LEFT JOIN (
+    SELECT
+      distinct Customer_Id,
+      Source_Customer_Id
+    FROM
+      ${ref("WRK_CUSTOMER_METRICS_PREP")},
+      UNNEST(Sources)
+    WHERE
+      Source_Customer_Id IS NOT NULL
+      AND Source_Customer_Id != ''
+  ) cust
+  ON
+    sales.source_customer_id = cust.Source_Customer_Id
+),
+combined as (
+  SELECT
+  Customer_Id,
+    * except(Customer_Id),
+    'source' as data_source
+  FROM
+    sales
+  UNION ALL
+  SELECT
+    * except(flag,sales_order)
+    ,
+    'destination' as data_source
+  FROM
+    facts.FACT_SALES
+),
+ranked as (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id, store_code, order_date, invoice_date ORDER BY export_date DESC) as rn
+  FROM
+    combined
+)
+SELECT
+  Sales_Order_Id,
+  sources,
+  invoice_id,
+  source_customer_id,
+  store_code,
+  currency_id,
+  country_delivery_id,
+  order_date,
+  invoice_date,
+  export_date,
+  cashier,
+  order_status,
+  shipping_status,
+  financed_order,
+  Billing_Address,
+  Shipping_Address,
+  order_line,
+  Customer_Id
+FROM
+  ranked
+WHERE
+  rn = 1

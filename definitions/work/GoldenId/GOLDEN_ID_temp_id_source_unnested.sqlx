@@ -1,0 +1,20 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_temp_id_source_unnested",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
+    dependencies :["WRK_GOLDEN_ID_REF"]
+
+}
+-- part 2 GOLDEN_ID_temp_id_source_unnested
+
+SELECT
+    temp_id,
+    pos_id,
+    ecom_id,
+    unnested_source_ids
+  FROM
+     ${ref("GOLDEN_ID_temp_id_source_grouped")}
+    CROSS JOIN UNNEST(all_source_ids) unnested_source_ids
+
+

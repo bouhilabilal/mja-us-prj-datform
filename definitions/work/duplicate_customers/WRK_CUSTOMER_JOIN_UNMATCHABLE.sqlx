@@ -1,0 +1,16 @@
+
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_CUSTOMER_JOIN_UNMATCHABLE",
+    tags: ["dimensions", "CUSTOMERS","duplicate"]
+}
+
+SELECT
+  ARRAY_AGG(full_id) as nested_ids
+FROM 
+   ${ref("WRK_CUSTOMER_JOIN")}
+WHERE Last_name IS NULL
+  OR First_name IS NULL
+  OR (email IS NULL AND phone IS NULL)
+GROUP BY pos_id, ecom_id

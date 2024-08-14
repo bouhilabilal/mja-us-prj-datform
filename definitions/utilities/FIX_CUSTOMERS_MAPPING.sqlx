@@ -1,0 +1,20 @@
+
+IF NOT EXISTS (
+
+SELECT table_id FROM dimensions.__TABLES__ WHERE table_id = "DI_CUSTOMERS_MAPPING"
+)
+
+THEN CREATE table dimensions.DI_CUSTOMERS_MAPPING (
+  Customer_Id STRING,
+  highest_segment STRING,
+  date_of_highest_segment DATE,
+  current_segment STRING,
+  previous_rfm_segment STRING,
+  date_of_rfm		DATE,
+  age INT64,
+  MAPPING_hash INT64
+
+
+);
+
+END IF;

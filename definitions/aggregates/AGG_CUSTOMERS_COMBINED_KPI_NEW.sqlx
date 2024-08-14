@@ -1,0 +1,269 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMERS_COMBINED_KPI",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup","segmentation_new"]
+    }
+
+with customers as 
+(SELECT
+  CustConsent.Customer_Id  as Customer_Id,
+  Sources,
+  Last_Name,
+  First_Name,
+  Middle_Name,
+  Email,
+  Phone,
+  fictitious_customer,
+  Prefered_Postal_Address,
+  LANGUAGE as Language,
+  Nationality,
+  Birthdate,
+  Age,
+  Age_Range,
+  Salutation,
+  Salutation_Gender,
+  Main_Store_Id,
+  prospect,
+  customer_attrition ,
+  customer_repetition,
+  customer_segmentation,
+  current_segment ,
+  segment_last12to24m_name,
+  CustMetric.previous_rfm_segment,
+  segment_evolution,
+  highest_segment,
+  date_of_highest_segment,
+
+  Account_Creation_Date,
+  First_Order_Date,
+  Last_Order_Date,
+  Last_Activity_Date,
+  Last_Modified_Date,
+  Last_Viewed_Date,
+  Retention_Date,
+
+  consent_homephone_code,
+  consent_homephone,
+  consent_officephone_code,
+  consent_officephone,
+  consent_cellphone_code,
+  consent_cellphone,
+  consent_email1_code,
+  consent_email1,
+  consent_email2_code,
+  consent_email2,
+  Contactability,
+
+  Active,
+  date_of_rfm,
+  nb_lifetime_transactions,
+  history_transactions,
+  nb_transactions_last12m,
+  nb_transactions_last12to24m,
+  nb_transactions_last24m,
+  nb_lifetime_units,
+
+  Date_Of_Acceptance,
+  Date_Of_Opt_In_Update,
+  Privacy_Policy_Signed,
+  Customer_Type, 
+  -- CASE
+  --   WHEN EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id = 'sfcc') AND NOT EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id LIKE 'y2') THEN 'eCommerce'
+  --   WHEN EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id LIKE 'y2') AND NOT EXISTS(SELECT 1 FROM UNNEST(Sources) WHERE Source_Id = 'sfcc') THEN 'Store'
+  --   ELSE 'Mix'
+  -- END AS Customer_Channel,
+--   CASE
+--   WHEN (SELECT COUNT(*) FROM UNNEST(Sources) WHERE Source_Id = 'sfcc') = (SELECT COUNT(*) FROM UNNEST(Sources)) THEN 'eCommerce'
+--   WHEN (SELECT COUNT(*) FROM UNNEST(Sources) WHERE Source_Id LIKE 'y2') = (SELECT COUNT(*) FROM UNNEST(Sources)) THEN 'Store'
+--   ELSE 'Mix'
+-- END AS Customer_Channel,
+ct3.Customer_Channel as Customer_Channel ,
+  -- Type_of_buyer, 
+    -- CASE
+    --     WHEN ct2.full_price_orders > 0 AND ct2.discounted_orders = 0 and fully_returned is false THEN 'No Promo buyer'
+    --     WHEN ct2.full_price_orders = ct2.discounted_orders  and fully_returned is false THEN 'Promo buyer' 
+    --     ELSE  'Mix buyer'
+    --   END AS Type_of_buyer,
+  Privacy_Policy_Acceptance,
+  Local_Client,
+  Sales_Associate,
+  Master_Record_Id,
+  nb_units_last12m, 
+  nb_units_last12to24m, 
+  nb_units_last24m, 
+  full_unit_per_ticket, 
+  last_12m_unit_per_ticket, 
+  last_12to24m_unit_per_ticket, 
+  last_24m_unit_per_ticket, 
+  Global_LTV, 
+  Last_12M_LTV, 
+  Last_12M_LTV_TI, 
+  Last_12Mto24M_LTV, 
+  Last_12Mto24M_LTV_TI, 
+  Last_24M_LTV, 
+  Last_24M_LTV_TI, 
+  full_avg_basket, 
+  avg_basket_last12m, 
+  avg_basket_last12m_ti, 
+  avg_basket_last_12to24m, 
+  avg_basket_last_12to24m_ti,  
+  avg_basket_last_24m, 
+  avg_basket_last_24m_ti, 
+  full_avg_unit_price, 
+  avg_unit_price_last12m, 
+  avg_unit_price_last12m_ti, 
+  avg_unit_price_last24m, 
+  avg_unit_price_last24m_ti, 
+  avg_unit_price_last12to24m, 
+  avg_unit_price_last12to24m_ti, 
+  
+FROM
+  ${ref("AGG_CUSTOMER_CONSENT")} CustConsent
+
+LEFT JOIN
+  ${ref("AGG_CUSTOMER_SEGMENTATION")} CustMetric
+ON
+  CustConsent.customer_id = CustMetric.golden_id
+LEFT JOIN
+  ${ref("AGG_CUSTOMER_SEGMENTATION_HISTORY")} CustMetric2
+ON
+  CustConsent.customer_id = CustMetric2.golden_id
+LEFT JOIN
+  ${ref("AGG_CUSTOMER_ORDER_METRICS")} ct1
+ON
+  ct1.golden_id = CustConsent.customer_id
+LEFT JOIN
+  ${ref("AGG_CUSTOMER_INFO_SUMMARY")} ct2
+ON
+  ct2.golden_id = CustConsent.customer_id
+  LEFT JOIN
+  ${ref("AGG_CUSTOMERS_CHANNEL")} ct3
+ON
+  ct3.Customer_Id = CustConsent.customer_id
+),
+promos as 
+(SELECT 
+  distinct Customer_Id,
+  COUNT(*) AS total_count,
+  COUNT(CASE WHEN te_turnover > 0 AND te_turnover IS NOT NULL THEN 1 END) AS purchase_count,
+  COUNT(CASE WHEN te_amount_discount > 0 AND te_amount_discount IS NOT NULL THEN 1 END) AS discount_count
+FROM ${ref("FACT_SALES")} c
+LEFT JOIN UNNEST(order_line) ol
+WHERE return_flag <> 1 
+  AND flag <> 1
+  AND Customer_Id IS NOT NULL
+GROUP BY 
+  Customer_Id)
+
+select 
+    cust.Customer_Id ,
+  cust.Sources,
+  cust.Last_Name,
+  cust.First_Name,
+  cust.Middle_Name,
+  cust.Email,
+  cust.Phone,
+  cust.fictitious_customer,
+  cust.Prefered_Postal_Address,
+  cust.Language,
+  cust.Nationality,
+  cust.Birthdate,
+  cust.Age,
+  cust.Age_Range,
+  cust.Salutation,
+  cust.Salutation_Gender,
+  cust.Main_Store_Id,
+  case when cust.prospect is null then true
+  else cust.prospect end as prospect,
+  cust.customer_attrition ,
+  cust.customer_repetition,
+  cust.customer_segmentation,
+  cust.current_segment ,
+  cust.segment_last12to24m_name,
+  cust.previous_rfm_segment,
+  cust.segment_evolution,
+  cust.highest_segment,
+  cust.date_of_highest_segment,
+  cust.Account_Creation_Date,
+  cust.First_Order_Date,
+  cust.Last_Order_Date,
+  cust.Last_Activity_Date,
+  cust.Last_Modified_Date,
+  cust.Last_Viewed_Date,
+  cust.Retention_Date,
+  cust.consent_homephone_code,
+  cust.consent_homephone,
+  cust.consent_officephone_code,
+  cust.consent_officephone,
+  cust.consent_cellphone_code,
+  cust.consent_cellphone,
+  cust.consent_email1_code,
+  cust.consent_email1,
+  cust.consent_email2_code,
+  cust.consent_email2,
+  cust.Contactability,
+  cust.Active,
+  cust.date_of_rfm,
+  cust.nb_lifetime_transactions,
+  cust.nb_transactions_last12m,
+  cust.nb_transactions_last12to24m,
+  cust.nb_transactions_last24m,
+  cust.nb_lifetime_units,
+  cust.Date_Of_Acceptance,
+  cust.Date_Of_Opt_In_Update,
+  cust.Privacy_Policy_Signed,
+  cust.Customer_Type, 
+  cust.Customer_Channel,
+  -- cust.Type_of_buyer,
+  CASE
+        WHEN promos.total_count > 0 AND promos.discount_count = 0  THEN 'No Promo buyer'
+        WHEN promos.total_count = promos.discount_count   THEN 'Promo buyer' 
+        ELSE  'Mix buyer'
+  END AS Type_of_buyer, 
+  cust.Privacy_Policy_Acceptance,
+  case when cust.Prefered_Postal_Address[SAFE_OFFSET(0)].CountryId = country_id THEN TRUE ELSE FALSE END AS Local_Client,
+  cust.Sales_Associate,
+  cust.Master_Record_Id,
+  cust.nb_units_last12m, 
+  cust.nb_units_last12to24m, 
+  cust.nb_units_last24m, 
+  cust.full_unit_per_ticket, 
+  cust.last_12m_unit_per_ticket, 
+  cust.last_12to24m_unit_per_ticket, 
+  cust.last_24m_unit_per_ticket, 
+  cust.Global_LTV, 
+  cust.Last_12M_LTV, 
+  cust.Last_12M_LTV_TI, 
+  cust.Last_12Mto24M_LTV, 
+  cust.Last_12Mto24M_LTV_TI,  
+  cust.Last_24M_LTV, 
+  cust.Last_24M_LTV_TI, 
+  cust.full_avg_basket, 
+  cust.avg_basket_last12m, 
+  cust.avg_basket_last12m_ti, 
+  cust.avg_basket_last_12to24m, 
+  cust.avg_basket_last_12to24m_ti,  
+  cust.avg_basket_last_24m, 
+  cust.avg_basket_last_24m_ti, 
+  cust.full_avg_unit_price, 
+  cust.avg_unit_price_last12m, 
+  cust.avg_unit_price_last12m_ti, 
+  cust.avg_unit_price_last24m, 
+  cust.avg_unit_price_last24m_ti, 
+  cust.avg_unit_price_last12to24m, 
+  cust.avg_unit_price_last12to24m_ti, 
+  cust.history_transactions,
+  FARM_FINGERPRINT(TO_JSON_STRING(cust)) as fingerprint,
+  case when cust.history_transactions is not null or (cust.history_transactions is null and Account_Creation_Date >= '2020-01-01')
+  then 'di_customers' else 'cusomers_without_sales' END as Destination
+
+from customers cust
+  LEFT JOIN
+    `dimensions.DI_STORES` store ON cust.Main_Store_Id = store.store_code
+  LEFT JOIN 
+  promos on promos.Customer_Id = cust.Customer_Id
+-- where history_transactions is not null
+-- or (history_transactions is null and Account_Creation_Date >= '2020-01-01')
+
+

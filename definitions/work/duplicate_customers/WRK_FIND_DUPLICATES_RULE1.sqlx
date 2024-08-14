@@ -1,0 +1,41 @@
+
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_FIND_DUPLICATES_RULE1",
+    tags: ["dimensions", "CUSTOMERS","duplicate"]
+}
+
+js {
+  const {replace_special_letters} = require("includes/cleaning_functions/replace_special_letters.js");
+}
+
+-- First step to replace special characters (e.g. é to e)
+WITH special_characters_replaced as(
+    SELECT
+        ${replace_special_letters("lower(last_name)")} as last_name,
+        ${replace_special_letters("lower(first_name)")} as first_name,
+        lower(email) as email,
+        full_id
+    FROM ${ref("WRK_CUSTOMER_JOIN_MATCHABLE_RULE1")}
+)
+
+-- Second step to group the duplicates following rule 1
+, grouped_duplicates as (
+  SELECT
+    last_name,
+    first_name,
+    email,
+    ARRAY_AGG(
+        full_id ORDER BY full_id
+    ) as nested_ids_rule1
+  FROM special_characters_replaced
+  GROUP BY 1, 2, 3
+)
+
+-- Nest the duplicates IDs in a array to make it easier to manipulate
+SELECT
+  nested_ids_rule1,
+  last_name,
+  first_name
+FROM grouped_duplicates

@@ -1,0 +1,21 @@
+
+    config {
+        type: "table",
+        schema: "work",
+        name: "WRK_CUSTOMER_JOIN_MATCHABLE_RULE1",
+        tags: ["dimensions", "CUSTOMERS","duplicate"]
+    }
+
+    SELECT
+    Last_name as last_name,
+    First_name as first_name,
+    email as email,
+    full_id
+    FROM
+    ${ref("WRK_CUSTOMER_JOIN")}
+    WHERE
+    Last_name IS NOT NULL
+    AND First_name IS NOT NULL
+    AND email IS NOT NULL
+    order by Last_name,
+    first_name,email

@@ -1,0 +1,14 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_SALES",
+    tags: ["dimensions", "SALES", "PRE_SALES","cust_without_dudup"]
+
+} --    ,dependencies: ["PRE_SALES"]
+
+SELECT
+  sales.*,
+  
+FROM
+  ${ref("WRK_SALES")} sales
+

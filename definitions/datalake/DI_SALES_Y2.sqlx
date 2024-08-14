@@ -1,0 +1,71 @@
+config {
+  type: "incremental",
+  schema: "datalake", 
+  name: "DL_SALES_Y2",
+
+  tags: ["datalake", "PRICES"]
+
+}
+
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+
+-- incremental_where {
+--   PARSE_DATE('%Y%m%d', export_date) > (SELECT MAX(PARSE_DATE('%Y%m%d', export_date)) FROM ${self()})
+-- }
+
+SELECT
+  CASE WHEN Sales_Order_Id = '' THEN NULL ELSE Sales_Order_Id END AS Sales_Order_Id,
+  CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+  CASE WHEN Sources_Source_Sales_Order_Id = '' THEN NULL ELSE Sources_Source_Sales_Order_Id END AS Sources_Source_Sales_Order_Id,
+  CASE WHEN invoice_id = '' THEN NULL ELSE invoice_id END AS invoice_id,
+  CASE WHEN customer_id = '' THEN NULL ELSE customer_id END AS customer_id,
+  CASE WHEN sales_advisor_id = '' THEN NULL ELSE sales_advisor_id END AS sales_advisor_id,
+  CASE WHEN store_code = '' THEN NULL ELSE store_code END AS store_code,
+  CASE WHEN currency_id = '' THEN NULL ELSE currency_id END AS currency_id,
+  CASE WHEN country_delivery_id = '' THEN NULL ELSE country_delivery_id END AS country_delivery_id,
+  CASE WHEN order_date = '' THEN NULL ELSE order_date END AS order_date,
+  CASE WHEN invoice_date = '' THEN NULL ELSE invoice_date END AS invoice_date,
+  CASE WHEN export_date = '' THEN NULL ELSE export_date END AS export_date,
+  CASE WHEN discount_type = '' THEN NULL ELSE discount_type END AS discount_type,
+  CASE WHEN cashier = '' THEN NULL ELSE cashier END AS cashier,
+  CASE WHEN order_status = '' THEN NULL ELSE order_status END AS order_status,
+  CASE WHEN shipping_status = '' THEN NULL ELSE shipping_status END AS shipping_status,
+  CASE WHEN financed_order = '' THEN NULL ELSE financed_order END AS financed_order,
+  CASE WHEN Billing_Address_Address = '' THEN NULL ELSE Billing_Address_Address END AS Billing_Address_Address,
+  CASE WHEN Billing_Address_ZipCode = '' THEN NULL ELSE Billing_Address_ZipCode END AS Billing_Address_ZipCode,
+  CASE WHEN Billing_Address_City = '' THEN NULL ELSE Billing_Address_City END AS Billing_Address_City,
+  CASE WHEN Billing_Address_State = '' THEN NULL ELSE Billing_Address_State END AS Billing_Address_State,
+  CASE WHEN Billing_Address_countryID = '' THEN NULL ELSE Billing_Address_countryID END AS Billing_Address_countryID,
+  CASE WHEN Billing_Address_Country_Name = '' THEN NULL ELSE Billing_Address_Country_Name END AS Billing_Address_Country_Name,
+  CASE WHEN Shipping_Address_Address = '' THEN NULL ELSE Shipping_Address_Address END AS Shipping_Address_Address,
+  CASE WHEN Shipping_Address_ZipCode = '' THEN NULL ELSE Shipping_Address_ZipCode END AS Shipping_Address_ZipCode,
+  CASE WHEN Shipping_Address_City = '' THEN NULL ELSE Shipping_Address_City END AS Shipping_Address_City,
+  CASE WHEN Shipping_Address_State = '' THEN NULL ELSE Shipping_Address_State END AS Shipping_Address_State,
+  CASE WHEN Shipping_Address_countryID = '' THEN NULL ELSE Shipping_Address_countryID END AS Shipping_Address_countryID,
+  CASE WHEN Shipping_Address_Country_Name = '' THEN NULL ELSE Shipping_Address_Country_Name END AS Shipping_Address_Country_Name,
+  CASE WHEN transaction_type = '' THEN NULL ELSE transaction_type END AS transaction_type,
+  CASE WHEN order_line_order_line_id = '' THEN NULL ELSE order_line_order_line_id END AS order_line_order_line_id,
+  CASE WHEN order_line_product_id = '' THEN NULL ELSE order_line_product_id END AS order_line_product_id,
+  CASE WHEN order_line_product_markdown = '' THEN NULL ELSE order_line_product_markdown END AS order_line_product_markdown,
+  CASE WHEN order_line_quantity = '' THEN NULL ELSE order_line_quantity END AS order_line_quantity,
+  CASE WHEN order_line_tax_rate = '' THEN NULL ELSE order_line_tax_rate END AS order_line_tax_rate,
+  CASE WHEN order_line_te_turnover = '' THEN NULL ELSE order_line_te_turnover END AS order_line_te_turnover,
+  CASE WHEN order_line_te_turnover_full_price = '' THEN NULL ELSE order_line_te_turnover_full_price END AS order_line_te_turnover_full_price,
+  CASE WHEN order_line_ti_turnover = '' THEN NULL ELSE order_line_ti_turnover END AS order_line_ti_turnover,
+  CASE WHEN order_line_ti_turnover_full_price = '' THEN NULL ELSE order_line_ti_turnover_full_price END AS order_line_ti_turnover_full_price,
+  CASE WHEN order_line_te_amount_discount = '' THEN NULL ELSE order_line_te_amount_discount END AS order_line_te_amount_discount,
+  CASE WHEN order_line_te_amount_markdown = '' THEN NULL ELSE order_line_te_amount_markdown END AS order_line_te_amount_markdown,
+  CASE WHEN order_line_ti_amount_discount = '' THEN NULL ELSE order_line_ti_amount_discount END AS order_line_ti_amount_discount,
+  CASE WHEN order_line_ti_amount_markdown = '' THEN NULL ELSE order_line_ti_amount_markdown END AS order_line_ti_amount_markdown
+FROM
+  mja_us_bqd_dpf_y2_01_${env_prefix}.Y2_SALES
+  -- init_temp_tables.sales_y2
+
+  ${when(incremental(), `WHERE PARSE_DATE('%Y%m%d', CASE WHEN export_date = '' THEN NULL ELSE export_date END) > (SELECT MAX(PARSE_DATE('%Y%m%d', export_date)) FROM ${self()})`)}
+
+
+

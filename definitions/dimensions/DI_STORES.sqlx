@@ -1,0 +1,123 @@
+-- YACINE
+-- AJOUT de L'UNIQUE KEY
+
+config {
+  type: "incremental",
+  uniqueKey: ["store_code"],
+  schema: "dimensions",
+  name: "DI_STORES",
+    tags: ["dimensions", "STORES"]
+}
+
+
+with SA_with_hash as 
+(
+    SELECT
+*,
+TO_HEX(MD5(CONCAT(
+    COALESCE(store_code, ''),
+    COALESCE(store_name, ''),
+    COALESCE(location_name, ''),
+    COALESCE(street1, ''),
+    COALESCE(street2, ''),
+    COALESCE(street3, ''),
+    COALESCE(zip_code, ''),
+    COALESCE(city, ''),
+    COALESCE(State, ''),
+    COALESCE(area_id, ''),
+    COALESCE(area_name, ''),
+    COALESCE(country_id, ''),
+    COALESCE(country_name, ''),
+    COALESCE(zone_id, ''),
+    COALESCE(zone_name, ''),
+    COALESCE(store_type, ''),
+    COALESCE(cluster, ''),
+    COALESCE(distribution_type, ''),
+    COALESCE(market_name, ''),
+    COALESCE(storage_location_code, ''),
+    COALESCE(company_code, ''),
+    COALESCE(currency_key, ''),
+    COALESCE(cast (opening_date as string), ''),
+    COALESCE(cast (closing_date as string), '')
+  ))) AS row_hash
+FROM
+${ref("WRK_STORES")}  )
+  select 
+    ori.store_code,
+    ori.store_name,
+    ori.location_name,
+    ori.street1,
+    ori.street2,
+    ori.street3,
+    ori.zip_code,
+    ori.city,
+    ori.State,
+    ori.area_id,
+    ori.area_name,
+    ori.country_id,
+    ori.country_name,
+    ori.zone_id,
+    ori.zone_name,
+    ori.store_type,
+    ori.cluster,
+    ori.distribution_type,
+    ori.market_name,
+    ori.storage_location_code,
+    ori.company_code,
+    ori.currency_key,
+    ori.opening_date,
+    ori.closing_date,
+    ori.District, ori.Active , ori.like_for_like,
+    ori.row_hash
+  from 
+  SA_with_hash ori
+  
+  ${when(incremental(), `
+    LEFT JOIN ${self()} destination on cast (destination.store_code as string ) = ori.store_code
+    WHERE ifnull(destination.row_hash,'') <> ori.row_hash
+`) }
+
+
+
+
+-- config {
+--   type: "table",
+--   schema: "dimensions",
+--   name: "DI_STORES",
+--     tags: ["dimensions", "STORES"]
+-- }
+--   select 
+--     ori.store_code,
+--     ori.store_name,
+--     ori.location_name,
+--     ori.street1,
+--     ori.street2,
+--     ori.street3,
+--     ori.zip_code,
+--     ori.city,
+--     ori.State,
+--     ori.District,
+
+--     ori.area_id,
+--     ori.area_name,
+--     ori.country_id,
+--     ori.country_name,
+--     ori.zone_id,
+--     ori.zone_name,
+--     ori.store_type,
+--     ori.cluster,
+--     ori.distribution_type,
+--     ori.market_name,
+--     ori.storage_location_code,
+--     ori.company_code,
+--     ori.currency_key,
+--     ori.opening_date,
+--     ori.closing_date,
+--     active,
+--     like_for_like
+--     -- ori.row_hash
+--   from 
+--   ${ref("WRK_STORES")} ori
+  
+
+

@@ -1,0 +1,147 @@
+config {
+    type: "operations",
+    schema: "dimensions",
+    name: "UPDATE_DI_CUSTOMERS_CONSENT_EMAIL",
+    tags: ["dimensions", "CUSTOMERS", "consent_update"],
+    dependencies: ["DI_CUSTOMERS"]
+}
+js {
+    const {
+        ApplayRegEx
+    } = require("includes/cleaning_functions/js_email_regex.js");
+    const {recent, ancient} = require("includes/merging_functions/merge_on_time.js")
+}
+
+MERGE ${ref("DI_CUSTOMERS")} AS di
+USING (
+  with flattened_emails AS (
+  SELECT 
+    Customer_Id,
+    email,
+    LOWER(email.value) AS email_value,
+    email.value AS email_regex,
+    source_id,
+    consent,
+    update_consent_date,
+    valide
+  FROM ${ref("DI_CUSTOMERS")}, UNNEST(Email) AS email
+),ranked_data AS (
+  SELECT
+    LOWER(email_value) AS email_value, 
+    consent_email1_code,
+    Last_Modified_Date,
+    Account_Creation_Date,
+    ROW_NUMBER() OVER(PARTITION BY LOWER(email_value) ORDER BY Last_Modified_Date DESC) AS rn
+  FROM  ${ref("INT_CUTOMERS_KLAVIYO")}
+  WHERE consent_email1_code IS NOT NULL
+),
+klaviyo_data AS (
+
+SELECT
+  email_value,
+  FIRST_VALUE(consent_email1_code) OVER(PARTITION BY email_value ORDER BY Last_Modified_Date DESC) AS consent_email1_code,
+  MAX(Last_Modified_Date) OVER(PARTITION BY email_value) AS Last_Modified_Date,
+  CASE 
+    WHEN FIRST_VALUE(consent_email1_code) OVER(PARTITION BY email_value ORDER BY Last_Modified_Date DESC) ='SUBSCRIBED' THEN 'OPTIN' 
+    ELSE 'OPTOUT' 
+  END AS CONCENTSTATUS,
+  TRUE AS valide 
+FROM ranked_data
+WHERE rn = 1),
+combined_emails AS (
+  SELECT
+    fe.Customer_Id,
+    fe.email_value,
+    source_id,
+    COALESCE(k.consent_email1_code, fe.consent) AS consent,
+    COALESCE(k.Last_Modified_Date, fe.update_consent_date) AS update_consent_date,
+    COALESCE(k.CONCENTSTATUS, CASE WHEN fe.consent ='SUBSCRIBED' THEN 'OPTIN' ELSE 'OPTOUT' END) AS CONCENTSTATUS,
+    COALESCE(k.valide, fe.valide) AS valide,
+    ROW_NUMBER() OVER (
+      PARTITION BY fe.Customer_Id
+      ORDER BY 
+        CASE 
+          WHEN k.email_value IS NOT NULL AND k.CONCENTSTATUS = 'OPTIN' THEN 1
+          WHEN k.email_value IS NOT NULL AND k.CONCENTSTATUS = 'OPTOUT' THEN 2
+          WHEN fe.valide = TRUE THEN 3
+          ELSE 4
+        END,
+        COALESCE(k.Last_Modified_Date, fe.update_consent_date) DESC
+    ) AS rn
+  FROM flattened_emails fe
+  LEFT JOIN klaviyo_data k ON fe.email_regex = k.email_value
+)
+  SELECT
+    Customer_Id,
+    ARRAY_AGG(
+      STRUCT(
+        CASE WHEN rn = 1 THEN TRUE ELSE FALSE END AS main_email,
+        source_id,
+        email_value AS value,
+        consent,
+        update_consent_date,
+        -- CONCENTSTATUS,
+        valide
+      )
+      ORDER BY rn
+    ) AS Email,
+    -- MAX(CASE WHEN email_value IN (SELECT email_value FROM klaviyo_data) THEN consent ELSE NULL END) AS consent_email1_code
+    MAX(CASE WHEN rn = 1 THEN consent ELSE NULL END) AS consent_email1_code
+  FROM combined_emails
+  GROUP BY Customer_Id
+
+) AS update_data
+ON di.Customer_Id = update_data.Customer_Id
+WHEN MATCHED THEN
+  UPDATE SET 
+    di.Email = update_data.Email,
+    di.consent_email1_code = COALESCE(update_data.consent_email1_code, di.consent_email1_code)
+
+
+
+-- MERGE ${ref("DI_CUSTOMERS")} AS di
+-- USING (
+--   WITH flattened_emails AS (
+--     SELECT 
+--       Customer_Id,
+--       email,
+--       LOWER(email.value) AS email_value,
+--       email.value AS email_regex,
+--       consent_email1_code,
+--       Last_Modified_Date
+--     FROM ${ref("DI_CUSTOMERS")}, UNNEST(Email) AS email
+--   ),
+--   klaviyo_data AS (
+--     SELECT
+--       LOWER(email_value) AS email_value, 
+--       consent_email1_code,
+--       Last_Modified_Date
+--     FROM ${ref("INT_CUTOMERS_KLAVIYO")}
+--     WHERE consent_email1_code IS NOT NULL
+--   ),
+--   updated_emails AS (
+--     SELECT
+--       fe.Customer_Id,
+--       STRUCT(
+--         fe.email.main_email,
+--         fe.email.source_id,
+--         fe.email.value,
+--         COALESCE(k.consent_email1_code, fe.email.consent) AS consent,
+--         COALESCE(k.Last_Modified_Date, fe.email.update_consent_date) AS update_consent_date
+--       ) AS updated_email,
+--       k.consent_email1_code
+--     FROM flattened_emails fe
+--     LEFT JOIN klaviyo_data k ON fe.email_regex = k.email_value
+--   )
+--   SELECT
+--     Customer_Id,
+--     ARRAY_AGG(updated_email) AS updated_email,
+--     MAX(consent_email1_code) AS consent_email1_code
+--   FROM updated_emails
+--   GROUP BY Customer_Id
+-- ) AS update_data
+-- ON di.Customer_Id = update_data.Customer_Id
+-- WHEN MATCHED THEN
+--   UPDATE SET 
+--     di.Email = update_data.updated_email,
+--     di.consent_email1_code = COALESCE(update_data.consent_email1_code, di.consent_email1_code)

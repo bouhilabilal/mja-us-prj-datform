@@ -1,0 +1,7 @@
+CREATE OR REPLACE TABLE  work.WRK_GOLDEN_ID_REF
+AS
+  SELECT
+    cast(golden_id as int64) as golden_id,
+    pos_id,
+    ecom_id
+  FROM ${ref("WRK_CUSTOMER_GOLDEN_ID")}

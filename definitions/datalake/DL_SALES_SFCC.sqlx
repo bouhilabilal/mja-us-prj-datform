@@ -1,0 +1,66 @@
+config {
+  type: "incremental",
+  schema: "datalake", 
+  name: "DL_SALES_SFCC",
+
+  tags: ["datalake", "PRICES"]
+}
+
+js {
+  const env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+} 
+
+-- incremental_where {
+--   PARSE_DATE('%Y%m%d', export_date) > (SELECT MAX(PARSE_DATE('%Y%m%d', export_date)) FROM ${self()})
+-- }
+
+SELECT
+  Sales_Order_Id,
+  Sources_Source_Id,
+  Sources_Source_Sales_Order_Id,
+  invoice_id,
+  customer_id,
+  sales_advisor_id,
+  store_code,
+  currency_id,
+  country_delivery_id,
+  order_date,
+  invoice_date,
+  export_date,--------------
+  discount_type,
+  cashier,
+  order_status,
+  shipping_status,
+  financed_order,
+  Billing_Address_Address ,
+  Billing_Address_ZipCode,
+  Billing_Address_City,
+  Billing_Address_State,
+  Billing_Address_countryID,
+  Billing_Address_Country_Name,
+  Shipping_Address_Address,
+  Shipping_Address_ZipCode,
+  Shipping_Address_City,
+  Shipping_Address_State,
+  Shipping_Address_countryID,
+  Shipping_Address_Country_Name,
+  transaction_type,
+  order_line_order_line_id,
+  order_line_product_id,
+   order_line_product_markdown,
+  order_line_quantity,
+  order_line_tax_rate,
+  order_line_te_turnover,
+  order_line_te_turnover_full_price,
+  order_line_ti_turnover,
+  order_line_ti_turnover_full_price,
+  order_line_te_amount_discount,
+  order_line_te_amount_markdown,
+  order_line_ti_amount_discount,
+  order_line_ti_amount_markdown
+FROM
+  mja_us_bqd_dpf_sfcc_01_${env_prefix}.SFCC_SALES
+    -- init_temp_tables.sales_sfcc
+  ${when(incremental(), `WHERE PARSE_DATE('%Y%m%d', export_date) > (SELECT MAX(PARSE_DATE('%Y%m%d', export_date)) FROM ${self()})`)}

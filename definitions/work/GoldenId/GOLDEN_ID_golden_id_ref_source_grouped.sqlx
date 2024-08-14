@@ -1,0 +1,32 @@
+config {
+    type: "table",
+    schema: "work",
+    name: "GOLDEN_ID_golden_id_ref_source_grouped",
+    tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
+    dependencies :["WRK_GOLDEN_ID_REF"]
+
+}
+
+-- part 3 GOLDEN_ID_golden_id_ref_source_grouped
+with max_golden_id as (
+  select case when max(cast (Customer_Id as int64)) is not null then max(cast (Customer_Id as int64)) else 0 END  as max_golden from
+  dimensions.DI_CUSTOMERS
+),
+ golden_id_ref_source_grouped AS(
+  SELECT
+    golden_id + (SELECT max_golden FROM max_golden_id) AS  golden_id,
+    ARRAY(SELECT pos_id UNION ALL SELECT ecom_id) as all_source_ids
+  FROM
+    ${ref("WRK_GOLDEN_ID_REF")}
+),
+  golden_id_ref_source_unnested AS(
+  SELECT
+    golden_id,
+    unnested_source_ids
+  FROM
+    golden_id_ref_source_grouped
+  CROSS JOIN
+    UNNEST(all_source_ids) unnested_source_ids
+        where unnested_source_ids <> ""
+ )
+ select * from golden_id_ref_source_unnested

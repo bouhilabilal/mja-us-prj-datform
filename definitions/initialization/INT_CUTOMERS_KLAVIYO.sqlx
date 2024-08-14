@@ -1,0 +1,63 @@
+config {
+    type: "table",
+    schema: "initialization",
+    name: "INT_CUTOMERS_KLAVIYO",
+    tags: ["dimensions", "initialization","CUSTOMERS","duplicate"],
+    dependencies: ["DI_SALES_ADVISOR"]
+}
+
+
+
+js {
+    const {
+        clean_email
+    } = require("includes/cleaning_functions/clean_email.js");
+    const {
+        clean_name,
+        clean_name_only_roman_letters
+    } = require("includes/cleaning_functions/clean_name.js");
+    const {
+        full_date
+    } = require("includes/cleaning_functions/clean_date.js");
+    const {
+        clean_phone
+    } = require("includes/cleaning_functions/clean_phone.js");
+    env_prefix = dataform.projectConfig.vars.env === "dev" ? "dev" :
+                     dataform.projectConfig.vars.env === "ppd" ? "ppd" :
+                     "prd";
+}
+with customers_klaviyo as (
+  select distinct
+CASE WHEN last_name = '' THEN NULL ELSE last_name END AS last_name,
+CASE WHEN first_name = '' THEN NULL ELSE first_name END AS first_name,
+CASE WHEN email_value = '' THEN NULL ELSE email_value END AS email_value,
+CASE WHEN Account_Creation_Date = '' THEN NULL ELSE Account_Creation_Date END AS Account_Creation_Date,
+CASE WHEN Last_Modified_Date = '' THEN NULL ELSE Last_Modified_Date END AS Last_Modified_Date,
+CASE WHEN consent_email1_code = '' THEN NULL ELSE consent_email1_code END AS consent_email1_code,
+   from 
+  mja_us_bqd_dpf_klaviyo_01_${env_prefix}.KLAVIYO_CUSTOMERS
+)
+SELECT
+  'klaviyo' as  Sources_Source_Id ,
+  CASE
+    WHEN REGEXP_CONTAINS(REGEXP_REPLACE(cust.Last_Name, r'  +', ' '), r'[!"#%$​*+,:;<=>?@^_`|~€£]|[])}]|[[({]') THEN NULL
+  ELSE
+  INITCAP(TRIM(REGEXP_REPLACE(cust.Last_Name, r'  +', ' ')))
+END
+  AS last_name,
+  CASE
+    WHEN REGEXP_CONTAINS(REGEXP_REPLACE(cust.First_Name, r'  +', ' '), r'[!"#%$​*+,:;<=>?@^_`|~€£]|[])}]|[[({]') THEN NULL
+  ELSE
+  INITCAP(TRIM(REGEXP_REPLACE(cust.First_Name, r'  +', ' ')))
+END
+  AS first_name,
+
+  ${clean_email("Email_value")} AS email_value,
+  ${full_date("Account_Creation_Date")} AS Account_Creation_Date,
+  ${full_date("Last_Modified_Date")} AS Last_Modified_Date,
+  consent_email1_code,
+FROM
+customers_klaviyo cust
+where email_value is not null
+
+

@@ -1,0 +1,81 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMER_ORDER_METRICS",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+
+WITH promos as 
+    (SELECT 
+    distinct Customer_Id,Sales_Order_Id,flag
+    FROM ${ref("FACT_SALES")} c
+    WHERE Customer_Id IS NOT NULL),
+Last24MonthsSales AS (
+  SELECT
+    golden_id,
+    store_code,
+    Billing_Address_CountryID as CountryID,
+    max(order_date) as  max_order_date,
+    COUNT(DISTINCT pres_sales.Sales_Order_Id) AS transaction_count,
+    COUNT(Billing_Address_CountryID) AS country_count,
+    -- MAX(CASE WHEN order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN TRUE ELSE FALSE END) AS has_recent_transaction
+  FROM
+    ${ref("INT_PRECALC_SALES_USD")} pres_sales
+    left join promos on pres_sales.golden_id = promos.Customer_Id and 
+    pres_sales.Sales_Order_Id = promos.Sales_Order_Id
+    where flag <>1
+  GROUP BY
+    golden_id,
+    store_code,
+    CountryID
+),
+RankStores AS (
+  SELECT
+    golden_id,
+    MLS.store_code,
+    country_id, CountryID,
+    SUM(transaction_count) AS stores_transaction_count,
+    SUM(country_count) AS country_transaction_count,
+    STRING_AGG(DISTINCT store.store_type, ', ') AS store_types,
+
+    -- has_recent_transaction,
+    ROW_NUMBER() OVER (PARTITION BY golden_id ORDER BY SUM(transaction_count) DESC,max_order_date DESC, MLS.store_code ASC) AS store_rank
+  FROM
+    Last24MonthsSales MLS
+  LEFT JOIN
+    `dimensions.DI_STORES` store ON MLS.store_code = store.store_code
+  GROUP BY
+    golden_id,
+    store_code,
+    country_id,
+    CountryID,
+    max_order_date
+    )
+
+SELECT
+  rs.golden_id,
+  store_code AS Main_Store_Id,
+  -- MAX(has_recent_transaction) AS Active,
+  CASE WHEN country_id = CountryID THEN TRUE ELSE FALSE END AS Local_Client,
+  CASE
+    WHEN store_types = 'FULL PRICE' THEN 'Full Price'
+    WHEN store_types = 'OFF PRICE' THEN 'Off price'
+    WHEN store_types IN ('FULL PRICE, OFF PRICE', 'OFF PRICE, FULL PRICE') THEN 'Store'
+    WHEN store_types = 'ECOMMERCE' THEN 'eCommerce'
+    WHEN store_types LIKE '%ECOMMERCE%' AND (store_types LIKE '%FULL PRICE%' OR store_types LIKE '%OFF PRICE%') THEN 'Mix'
+    ELSE 'Other'
+  END AS Customer_Channel,
+FROM
+  RankStores rs
+WHERE
+  store_rank = 1
+GROUP BY
+  rs.golden_id,
+  store_code,
+  country_id,
+  CountryID,
+  store_types
+
+ORDER BY
+  golden_id,
+  Main_Store_Id

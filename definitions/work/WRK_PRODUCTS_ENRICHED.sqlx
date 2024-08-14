@@ -1,0 +1,77 @@
+-- Filename: add_new_columns.sqlx
+
+config {
+  type: "table",
+  schema: "work",
+  name: "WRK_PRODUCTS",
+    tags: ["dimensions", "PRODUCTS","cust_without_dudup"]
+}
+
+SELECT 
+  Product_ID,
+  Style,
+  SKU,
+  Barcode_UPC,
+  SID,
+  External_ID,
+  Product_Name,
+  -- Product_Description,
+  Brand,
+  Design_Season_Code,
+  Design_Season,
+  Season,
+  In_Store_Month,
+  Season_Year,
+  Variant_status,
+  -- Calculate 'active' column
+  CASE 
+    WHEN Variant_status = '1' THEN TRUE
+    ELSE FALSE
+  END AS active,
+  Created_Date,
+  Modified_Date,
+  Division_Code,
+  Division,
+  Category_Code,
+  Category,
+  Class_Code,
+  Class,
+  Subclass_Code,
+  Subclass,
+  MJ_Division_Code,
+  MJ_Division,
+  -- Merch_Collection_Code,
+  Merch_Collection,
+  -- Merch_Theme_Code,
+  Merch_Theme,
+  Group_Code,
+  `Group`,
+  Line_Code,
+  Line,
+  Department_Code,
+  Department,
+  Subdepartment_Code,
+  Subdepartment,
+  Report_Category,
+  Report_Category_Detail,
+  Color_Code,
+  Color,
+  Size,
+  Size_rank,
+  Composition_Code,
+  Composition,
+  Gender,
+  MJ_Product_Life_Cycle,
+  Product_Life_Cycle_Type,
+  Country_of_origin_Iso3,
+  Country_of_origin_Iso2,
+  Country_of_origin,
+  MJ_Core_Assortment,
+  CONCAT(
+    'https://cdn.media.amplience.net/i/Marc_Jacobs/MJI_', 
+    Style, 
+    '_', 
+    Color_Code, 
+    '_F8F8F8_1-1_MAIN?w=1000&qlt=60'
+  ) AS Image
+FROM ${ref("INT_PRODUCTS")}

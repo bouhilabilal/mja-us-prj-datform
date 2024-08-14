@@ -1,0 +1,149 @@
+config {
+    type: "table",
+    schema: "dimensions",
+    name: "DI_CUSTOMERS",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup","segmentation_new"],
+    uniqueKey : ["Customer_Id"]
+ }
+
+WITH Agg_Customers AS (
+select 
+  customers.Customer_Id,
+  customers.Sources,
+  customers.Last_Name,
+  customers.First_Name,
+  customers.Middle_Name,
+  customers.Email,
+  customers.Phone,
+  customers.fictitious_customer,
+  customers.Prefered_Postal_Address,
+  customers.Language,
+  customers.Nationality,
+  customers.Birthdate,
+  customers.Age,
+  customers.Age_Range,
+  customers.Salutation,
+  case when customers.Salutation_Gender = '' then null 
+  else customers.Salutation_Gender END
+  as Salutation_Gender,
+  case when customers.prospect then NULL else customers.Main_Store_Id end as Main_Store_Id,
+  customers.prospect,
+  case when prospect then 'Prospect' else customers.customer_attrition end as customer_attrition,
+  case when prospect then 'Prospect' else customers.customer_repetition end customer_repetition,
+--   case WHEN customers.customer_segmentation is null  then 'prospect' else customers.customer_segmentation end as customer_segmentation,
+  case when customers.prospect then NULL   else  customers.customer_segmentation end as customer_segmentation,
+   case when customers.prospect then NULL else   customers.current_segment end as current_segment,
+--   customers.current_segment ,
+  case when customers.prospect then NULL else  customers.segment_last12to24m_name end as segment_last12to24m_name,
+  case when customers.prospect then NULL else customers.previous_rfm_segment  end as previous_rfm_segment,
+  case when customers.prospect then NULL else customers.segment_evolution end as segment_evolution,
+  case when customers.prospect then NULL else customers.highest_segment end as highest_segment,
+  case when customers.prospect then NULL else customers.date_of_highest_segment end as date_of_highest_segment,
+  customers.Account_Creation_Date,
+  case when customers.prospect then NULL else customers.First_Order_Date end as First_Order_Date,
+  case when customers.prospect then NULL else customers.Last_Order_Date end as Last_Order_Date,
+  customers.Last_Activity_Date,
+  customers.Last_Modified_Date,
+  customers.Last_Viewed_Date,
+  customers.Retention_Date,
+  customers.consent_homephone_code,
+  customers.consent_homephone,
+  customers.consent_officephone_code,
+  customers.consent_officephone,
+  customers.consent_cellphone_code,
+  customers.consent_cellphone,
+  customers.consent_email1_code,
+  customers.consent_email1,
+  customers.consent_email2_code,
+  customers.consent_email2,
+  customers.Contactability,
+  case when customers.prospect then NULL 
+   when customers.Active is null then false
+   else customers.Active END as Active ,
+-- customers.Active,
+  case when customers.prospect then NULL else customers.date_of_rfm end as date_of_rfm,
+  case when customers.prospect then 0 else customers.nb_lifetime_transactions end as nb_lifetime_transactions,
+  case when customers.prospect then 0 else customers.nb_transactions_last12m end as nb_transactions_last12m,
+  case when customers.prospect then 0 else customers.nb_transactions_last12to24m end as nb_transactions_last12to24m,
+  case when customers.prospect then 0 else customers.nb_transactions_last24m end as nb_transactions_last24m,
+  case when customers.prospect then 0 else customers.nb_lifetime_units end as nb_lifetime_units,
+  customers.Date_Of_Acceptance,
+  customers.Date_Of_Opt_In_Update,
+  customers.Privacy_Policy_Signed,
+  case when upper( customers.Email[SAFE_OFFSET(0)].value) like '%@MARCJACOBS.COM%' then 'Employee' else customers.Customer_Type END as Customer_Type, 
+  case when customers.prospect then NULL else customers.Customer_Channel end as Customer_Channel,
+  case when customers.prospect then NULL else customers.Type_of_buyer end as Type_of_buyer, 
+  customers.Privacy_Policy_Acceptance,
+  case when customers.prospect then NULL else customers.Local_Client end as Local_Client,
+  customers.Sales_Associate,
+  customers.Master_Record_Id,
+  case when customers.prospect then 0 else customers.nb_units_last12m end as nb_units_last12m, 
+  case when customers.prospect then 0 else customers.nb_units_last12to24m end as nb_units_last12to24m, 
+  case when customers.prospect then 0 else customers.nb_units_last24m end as nb_units_last24m, 
+  customers.full_unit_per_ticket, 
+  customers.last_12m_unit_per_ticket, 
+  customers.last_12to24m_unit_per_ticket, 
+  customers.last_24m_unit_per_ticket, 
+  case when customers.prospect then 0 else customers.Global_LTV end as Global_LTV, 
+  case when customers.prospect then 0 else customers.Last_12M_LTV end as Last_12M_LTV, 
+  case when customers.prospect then 0 else customers.Last_12M_LTV_TI end as Last_12M_LTV_TI, 
+  case when customers.prospect then 0 else customers.Last_12Mto24M_LTV end as Last_12Mto24M_LTV, 
+  case when customers.prospect then 0 else customers.Last_12Mto24M_LTV_TI end as Last_12Mto24M_LTV_TI, 
+  case when customers.prospect then 0 else  customers.Last_24M_LTV end as Last_24M_LTV, 
+  case when customers.prospect then 0 else customers.Last_24M_LTV_TI end as Last_24M_LTV_TI, 
+  case when customers.prospect then 0 else customers.full_avg_basket end as full_avg_basket, 
+  case when customers.prospect then 0 else customers.avg_basket_last12m end as avg_basket_last12m, 
+  case when customers.prospect then 0 else customers.avg_basket_last12m_ti end as avg_basket_last12m_ti, 
+  case when customers.prospect then 0 else customers.avg_basket_last_12to24m end as avg_basket_last_12to24m, 
+  case when customers.prospect then 0 else customers.avg_basket_last_12to24m_ti end as avg_basket_last_12to24m_ti,  
+  case when customers.prospect then 0 else customers.avg_basket_last_24m end as avg_basket_last_24m, 
+  case when customers.prospect then 0 else customers.avg_basket_last_24m_ti end as avg_basket_last_24m_ti, 
+  case when customers.prospect then 0 else customers.full_avg_unit_price end as full_avg_unit_price, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12m end as avg_unit_price_last12m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12m_ti end as avg_unit_price_last12m_ti, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last24m end as avg_unit_price_last24m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last24m_ti end as avg_unit_price_last24m_ti, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12to24m end as avg_unit_price_last12to24m, 
+  case when customers.prospect then 0 else customers.avg_unit_price_last12to24m_ti end as avg_unit_price_last12to24m_ti, 
+  case when delete_cust.Email is not null and customers.prospect = true then true else false end as deleted_cust
+  
+ from ${ref("AGG_CUSTOMERS_COMBINED_KPI")} customers
+ left join manual_files.customers_to_delete delete_cust
+ on UPPER(customers.Email[SAFE_OFFSET(0)].value) = upper( delete_cust.Email)
+ where Destination = 'di_customers'
+
+ ),
+-- Non_Matching_Customers AS (
+
+--   SELECT
+--     di.* except (deleted_cust),
+--     case when delete_cust.Email is not null and di.prospect = true then true else false end as deleted_cust
+--   FROM dimensions.DI_CUSTOMERS di
+--   LEFT JOIN Agg_Customers agg
+--     ON di.Customer_Id = agg.Customer_Id
+
+--   left join manual_files.customers_to_delete delete_cust
+--  on UPPER(di.Email[SAFE_OFFSET(0)].value) = upper( delete_cust.Email)
+--  WHERE agg.Customer_Id IS NULL
+-- )
+Non_Matching_Customers AS (
+  SELECT
+    di.* except (deleted_cust),
+    case when delete_cust.Email is not null and di.prospect = true then true else false end as deleted_cust
+  FROM( select di.* from dimensions.DI_CUSTOMERS di
+        left join (select distinct tech_golden_id from initialization.INT_CUSTOMERS_SELF_SFCC_FULL
+                    union all 
+                    select distinct tech_golden_id from initialization.INT_CUSTOMERS_SELF_Y2_FULL 
+            )
+            on Customer_Id = tech_golden_id
+            where tech_golden_id is  null) di
+  LEFT JOIN Agg_Customers agg
+        ON di.Customer_Id = agg.Customer_Id
+  left join manual_files.customers_to_delete delete_cust
+        on UPPER(di.Email[SAFE_OFFSET(0)].value) = upper( delete_cust.Email)
+        WHERE agg.Customer_Id IS NULL
+)
+SELECT * FROM Non_Matching_Customers
+UNION ALL
+SELECT * FROM Agg_Customers
+

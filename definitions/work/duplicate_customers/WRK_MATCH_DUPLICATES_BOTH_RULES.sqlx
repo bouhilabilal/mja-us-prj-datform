@@ -1,0 +1,248 @@
+
+config {
+    type: "table",
+    schema: "work",
+    name: "WRK_MATCH_DUPLICATES_BOTH_RULES",
+    tags: ["dimensions", "CUSTOMERS","duplicate"]
+}
+
+js {
+  const {
+    identify_subarray
+  } = require("includes/matching_functions/subarrays.js");
+}
+
+
+-- Join the duplicates from both rules and identify if some IDs are duplicated in both rules
+WITH nested_duplicates_both_rules as (
+  SELECT
+    COALESCE(r2.last_name, r1.last_name) as last_name,
+    COALESCE(r2.first_name, r1.first_name) as first_name,
+    CASE
+      WHEN ARRAY_LENGTH(nested_ids_rule1) IS NULL THEN nested_ids_rule2
+      WHEN ARRAY_LENGTH(nested_ids_rule2) IS NULL THEN nested_ids_rule1
+      ELSE ARRAY(
+        SELECT
+          DISTINCT unnested_ids_both_rules
+        FROM
+          UNNEST(
+            ARRAY_CONCAT(nested_ids_rule1, nested_ids_rule2)
+          ) unnested_ids_both_rules
+        ORDER BY
+          unnested_ids_both_rules
+      )
+    END as concat_both_rules_ids,
+    nested_ids_rule1,
+    nested_ids_rule2,
+    ARRAY_LENGTH(
+      ARRAY (
+        (
+          SELECT
+            *
+          FROM
+            r1.nested_ids_rule1
+        )
+        INTERSECT
+          DISTINCT (
+            SELECT
+              *
+            FROM
+              r2.nested_ids_rule2
+          )
+      )
+    ) as intersection_both_rules_ids
+    -- Take the intersection to check if two different (last_name, first_name) duplicates on both rules are from the same person or not
+  FROM
+    ${ref("WRK_FIND_DUPLICATES_RULE1")} r1 FULL
+    JOIN ${ref("WRK_FIND_DUPLICATES_RULE2")} r2 ON r1.last_name = r2.last_name
+    AND r1.first_name = r2.first_name
+)
+-- Only keep the arrays for which the ID could be found in rule 1 and rule 2 at the same time
+,
+merge_both_rules_with_common_id as(
+  SELECT
+    last_name,
+    first_name,
+    concat_both_rules_ids as nested_ids
+  FROM
+    nested_duplicates_both_rules
+  WHERE
+    intersection_both_rules_ids <> 0
+)
+-- Find the IDs that could only be found in the rule 1 duplicates
+,
+only_rule1_ids as (
+  SELECT
+    last_name,
+    first_name,
+    nested_ids_rule1 as nested_ids
+  FROM
+    nested_duplicates_both_rules
+  WHERE
+    (
+      intersection_both_rules_ids = 0
+      OR intersection_both_rules_ids IS NULL
+    )
+    AND ARRAY_LENGTH(nested_ids_rule1) <> 0
+    AND last_name IS NOT NULL
+    AND first_name IS NOT NULL
+)
+-- Find the IDs that could only be found in the rule 2 duplicates
+,
+only_rule2_ids as (
+  SELECT
+    last_name,
+    first_name,
+    nested_ids_rule2 as nested_ids
+  FROM
+    nested_duplicates_both_rules
+  WHERE
+    intersection_both_rules_ids = 0
+    AND ARRAY_LENGTH(nested_ids_rule2) <> 0
+    AND last_name IS NOT NULL
+    AND first_name IS NOT NULL
+)
+-- Get an exhaustive ID list by putting the three previous table into the same one
+,
+nested_IDs_both_rules_applied as(
+  SELECT
+    *
+  FROM
+    merge_both_rules_with_common_id
+  UNION ALL
+  SELECT
+    *
+  FROM
+    only_rule1_ids
+  UNION ALL
+  SELECT
+    *
+  FROM
+    only_rule2_ids
+)
+-- Remove duplicated arrays from the previous step
+,
+distinct_nested_ids as(
+  SELECT
+    last_name,
+    first_name,
+    SPLIT(array_string, '--__separation__--') as nested_IDs
+  FROM(
+      SELECT
+        DISTINCT last_name,
+        first_name,
+        ARRAY_TO_STRING(nested_ids, '--__separation__--', '') as array_string
+      FROM
+        nested_IDs_both_rules_applied
+    )
+  ORDER BY
+    Last_name
+)
+-- Some IDs can be found in several arrays from the previous step. This block will check if some IDs are within several arrays, and keep the most exhaustive array for each ID.
+,
+distinct_nested_ids_unique_names as (
+  SELECT
+    dn.last_name,
+    dn.first_name,
+    nested_ids
+  FROM
+    distinct_nested_ids dn
+    INNER JOIN (
+      SELECT
+        last_name,
+        first_name,
+        COUNT(*)
+      FROM
+        distinct_nested_ids
+      GROUP BY
+        1,
+        2
+      HAVING
+        COUNT(*) = 1
+    ) dnunique ON dn.last_name = dnunique.last_name
+    AND dn.first_name = dnunique.first_name
+),
+distinct_nested_ids_duplicated_names as (
+  SELECT
+    ROW_NUMBER() OVER() as array_number,
+    dn.last_name,
+    dn.first_name,
+    nested_IDs,
+    array_to_string(nested_IDs, '--__separation__--', '') as array_to_string_nested_IDs
+  FROM
+    distinct_nested_ids dn
+    INNER JOIN (
+      SELECT
+        last_name,
+        first_name,
+        COUNT(*)
+      FROM
+        distinct_nested_ids
+      GROUP BY
+        1,
+        2
+      HAVING
+        COUNT(*) > 1
+    ) dndup ON dn.last_name = dndup.last_name
+    AND dn.first_name = dndup.first_name
+),
+identify_sublist_ids as (
+  -- Identify ID lists that are subarrays of other ones in order to remove them
+  SELECT
+    dn1.last_name as last_name,
+    dn1.first_name as first_name,
+    dn2.nested_ids,
+    dn2.array_to_string_nested_IDs,
+    is_arraya_in_arrayb(dn2.nested_ids, dn1.nested_ids) as is_lista_in_listb
+  FROM
+    distinct_nested_ids_duplicated_names dn1
+    INNER JOIN distinct_nested_ids_duplicated_names dn2 ON dn1.last_name = dn2.last_name
+    AND dn1.first_name = dn2.first_name
+    AND dn1.array_to_string_nested_IDs <> dn2.array_to_string_nested_IDs
+  ORDER BY
+    dn1.last_name
+),
+nested_ids_without_sublists as (
+  -- Remove ID lists that are sublist of other ones
+  SELECT
+    last_name,
+    first_name,
+    array_to_string(nested_ids, '--__separation__--', '') as array_to_string_nested_IDs,
+    LOGICAL_OR(is_lista_in_listb) as sublist_of_other_idlist
+  FROM
+    identify_sublist_ids
+  GROUP by
+    1,
+    2,
+    3
+  ORDER BY
+    last_name,
+    array_to_string_nested_ids
+),
+deduplicated_list as (
+  SELECT
+    last_name,
+    first_name,
+    array_to_string_nested_ids
+  FROM
+    nested_ids_without_sublists
+  WHERE
+    sublist_of_other_idlist = false
+  UNION ALL
+  SELECT
+    last_name,
+    first_name,
+    array_to_string(nested_ids, '--__separation__--', '') as array_to_string_nested_ids
+  FROM
+    distinct_nested_ids_unique_names
+)
+SELECT
+  last_name,
+  first_name,
+  Split(array_to_string_nested_ids, '--__separation__--') as nested_ids
+FROM
+  deduplicated_list
+
+pre_operations {
+  ${identify_subarray()}
+}

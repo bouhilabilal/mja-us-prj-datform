@@ -1,0 +1,72 @@
+config {
+    type: "table",
+    schema: "aggregates",
+    name: "AGG_CUSTOMER_SEGMENTATION_HISTORY",
+    tags: ["dimensions", "CUSTOMERS","calculated","cust_without_dudup"]
+    }
+WITH
+  all_ranks AS (
+    SELECT
+      CustMetric.golden_id,
+      CustMetric.current_segment AS new_segment,
+      MappingCust.current_segment AS old_segment,
+      MappingCust.previous_rfm_segment as previous_rfm_segment,
+      IFNULL(ns.Order, 99) AS new_rank,
+      IFNULL(os.Order, 99) AS old_rank,
+      IFNULL(hs.Order, 99) AS highest_rank,
+      MappingCust.date_of_highest_segment,
+      MappingCust.highest_segment,
+      MappingCust.date_of_rfm
+      -- MappingCust.date_of_previous_rfm_segment
+
+    FROM
+      ${ref("AGG_CUSTOMER_SEGMENTATION")} CustMetric
+    LEFT JOIN
+      -- ${ref("mapping_customers")} MappingCust
+      dimensions.DI_CUSTOMERS_MAPPING MappingCust
+    ON
+      CAST(MappingCust.customer_id AS string) = CustMetric.golden_id
+    LEFT JOIN
+      dimensions.DI_SEGMENTS ns
+    ON
+      ns.Segment = CustMetric.current_segment
+    LEFT JOIN
+      dimensions.DI_SEGMENTS os
+    ON
+      os.Segment = MappingCust.current_segment
+     LEFT JOIN
+      dimensions.DI_SEGMENTS hs
+    ON
+    hs.Segment = MappingCust.highest_segment
+  ) 
+    SELECT
+    distinct 
+      golden_id,
+      CASE
+        WHEN new_rank < old_rank THEN 'Up'
+        WHEN new_rank > old_rank THEN 'Down'
+        ELSE NULL
+      END AS segment_evolution,
+
+      CASE
+        WHEN new_rank > highest_rank THEN new_segment
+        ELSE highest_segment
+      END AS highest_segment,
+
+      CASE
+        WHEN new_rank > highest_rank THEN CURRENT_DATE()
+        ELSE date_of_highest_segment
+      END AS date_of_highest_segment,
+      CASE
+        WHEN new_segment != previous_rfm_segment THEN old_segment
+        ELSE previous_rfm_segment
+      END AS previous_rfm_segment,
+      CASE
+        WHEN new_rank < old_rank THEN CURRENT_DATE()
+        WHEN new_rank > old_rank THEN CURRENT_DATE()
+        ELSE date_of_rfm
+      END AS date_of_rfm,
+      
+    FROM
+      all_ranks
+ 
