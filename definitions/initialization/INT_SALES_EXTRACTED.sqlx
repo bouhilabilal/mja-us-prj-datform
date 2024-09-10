@@ -15,7 +15,8 @@ with sales_sfcc_updated as (
 select 
 distinct
 CASE WHEN Sales_Order_Id = '' THEN NULL ELSE Sales_Order_Id END AS Sales_Order_Id,
-CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+  case when Sources_Source_Id is null then 'sfcc_us' 
+  else Sources_Source_Id END as Sources_Source_Id,
 CASE WHEN Sources_Source_Sales_Order_Id = '' THEN NULL ELSE Sources_Source_Sales_Order_Id END AS Sources_Source_Sales_Order_Id,
 CASE WHEN invoice_id = '' THEN NULL ELSE invoice_id END AS invoice_id,
 CASE WHEN customer_id = '' THEN NULL ELSE customer_id END AS customer_id,
@@ -118,7 +119,8 @@ sales_y2_updated as (
 select 
 distinct
 CASE WHEN Sales_Order_Id = '' THEN NULL ELSE Sales_Order_Id END AS Sales_Order_Id,
-CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+CASE WHEN Sources_Source_Id is null then 'y2' 
+  else Sources_Source_Id END as Sources_Source_Id,
 CASE WHEN Sources_Source_Sales_Order_Id = '' THEN NULL ELSE Sources_Source_Sales_Order_Id END AS Sources_Source_Sales_Order_Id,
 CASE WHEN invoice_id = '' THEN NULL ELSE invoice_id END AS invoice_id,
 CASE WHEN customer_id = '' THEN NULL ELSE customer_id END AS customer_id,
