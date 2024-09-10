@@ -26,7 +26,9 @@ js {
 }
 with customers_sfcc_update as (
   select 
-CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+-- CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc_us' 
+  else Sources_Source_Id END as Sources_Source_Id,
 CASE WHEN Sources_Source_Customer_Id = '' THEN NULL ELSE Sources_Source_Customer_Id END AS Sources_Source_Customer_Id,
 CASE WHEN Sources_Account_id = '' THEN NULL ELSE Sources_Account_id END AS Sources_Account_id,
 CASE WHEN Sources_Created_By_Id = '' THEN NULL ELSE Sources_Created_By_Id END AS Sources_Created_By_Id,
@@ -76,7 +78,9 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
 ),
 customers_sfcc_guest_update as (
   select 
-CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+-- CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
+case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc_us' 
+  else Sources_Source_Id END as Sources_Source_Id,
 CASE WHEN Sources_Source_Customer_Id = '' THEN NULL ELSE Sources_Source_Customer_Id END AS Sources_Source_Customer_Id,
 CASE WHEN Sources_Account_id = '' THEN NULL ELSE Sources_Account_id END AS Sources_Account_id,
 CASE WHEN Sources_Created_By_Id = '' THEN NULL ELSE Sources_Created_By_Id END AS Sources_Created_By_Id,
@@ -128,7 +132,8 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
 
 SELECT
 --  'sfcc' as Sources_Source_Id,
-Sources_Source_Id,
+case when Sources_Source_Id is null then 'sfcc-us' 
+  else Sources_Source_Id END as Sources_Source_Id,
   UPPER(Sources_Source_Customer_Id) as Sources_Source_Customer_Id,
   Sources_Account_id,
   Sources_Created_By_Id,
@@ -203,7 +208,8 @@ union all
 
 SELECT
 --  'sfcc' as Sources_Source_Id,
- Sources_Source_Id,
+case when Sources_Source_Id is null then 'sfcc-us' 
+  else Sources_Source_Id END as Sources_Source_Id,
   UPPER(Sources_Source_Customer_Id) as Sources_Source_Customer_Id,
   Sources_Account_id,
   Sources_Created_By_Id,
