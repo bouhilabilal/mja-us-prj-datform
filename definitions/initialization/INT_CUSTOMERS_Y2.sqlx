@@ -80,7 +80,7 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
 )
 SELECT
 --   'y2' as  Sources_Source_Id ,
-  case when Sources_Source_Id is null then 'y2' 
+  case when Sources_Source_Id is null or Sources_Source_Id = ''  then 'y2' 
   else Sources_Source_Id END as Sources_Source_Id,
   UPPER(Sources_Source_Customer_Id) as Sources_Source_Customer_Id,
   Sources_Account_id,
