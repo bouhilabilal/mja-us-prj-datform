@@ -29,7 +29,8 @@ GROUP BY
 
 ), sales as 
 (SELECT
-  cast( ABS(FARM_FINGERPRINT(CONCAT(IFNULL(ist.Sources_Source_Sales_Order_Id, ''), IFNULL(ist.store_code, ''),IFNULL(ist.source_customer_id, ''),IFNULL(ist.invoice_date, '1999-01-01')))) as string) AS Sales_Order_Id,
+  cast( ABS(FARM_FINGERPRINT(CONCAT(IFNULL(ist.Sources_Source_Sales_Order_Id, ''), IFNULL(ist.store_code, ''),--IFNULL(ist.source_customer_id, ''),
+  IFNULL(ist.invoice_date, '1999-01-01')))) as string) AS Sales_Order_Id,
   ist.Sources_Source_Sales_Order_Id,
   invoice_id,
   ist.source_customer_id,
@@ -152,4 +153,4 @@ GROUP BY
   inner join ids
    on ids.Sources_Source_Sales_Order_Id = ist.Sources_Source_Sales_Order_Id
    and ids.store_code = ist.store_code
-   and ids.source_customer_id = ist.source_customer_id
+  --  and ids.source_customer_id = ist.source_customer_id
