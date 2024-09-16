@@ -59,7 +59,7 @@ combined as (
 ranked as (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id, store_code, order_date, invoice_date ORDER BY export_date DESC) as rn
+    ROW_NUMBER() OVER (PARTITION BY Sales_Order_Id, store_code, order_date, invoice_date ORDER BY data_source desc,export_date DESC) as rn
   FROM
     combined
 )
