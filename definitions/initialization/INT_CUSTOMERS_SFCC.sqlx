@@ -25,7 +25,7 @@ js {
                      "prd";
 }
 with customers_sfcc_update as (
-  select 
+  select  distinct
 -- CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
 case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc_us' 
   else Sources_Source_Id END as Sources_Source_Id,
@@ -77,7 +77,7 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
   mja_us_bqd_dpf_sfcc_01_${env_prefix}.SFCC_CUSTOMERS
 ),
 customers_sfcc_guest_update as (
-  select 
+  select  distinct
 -- CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
 case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc_us' 
   else Sources_Source_Id END as Sources_Source_Id,
@@ -130,7 +130,7 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
 
 )
 
-SELECT
+SELECT distinct
 --  'sfcc' as Sources_Source_Id,
 case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc-us' 
   else Sources_Source_Id END as Sources_Source_Id,
@@ -206,7 +206,7 @@ customers_sfcc_update
 
 union all
 
-SELECT
+SELECT distinct
 --  'sfcc' as Sources_Source_Id,
 case when Sources_Source_Id is null or Sources_Source_Id = '' then 'sfcc-us' 
   else Sources_Source_Id END as Sources_Source_Id,

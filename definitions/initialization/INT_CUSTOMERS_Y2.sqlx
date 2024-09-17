@@ -27,7 +27,7 @@ js {
                      "prd";
 }
 with customers_y2_update as (
-  select 
+  select distinct 
 -- CASE WHEN Sources_Source_Id = '' THEN NULL ELSE Sources_Source_Id END AS Sources_Source_Id,
 case when Sources_Source_Id is null or Sources_Source_Id = '' then 'y2' 
   else Sources_Source_Id END as Sources_Source_Id,
@@ -78,7 +78,7 @@ CASE WHEN Master_Record_Id = '' THEN NULL ELSE Master_Record_Id END AS Master_Re
 
   mja_us_bqd_dpf_y2_01_${env_prefix}.Y2_CUSTOMERS
 )
-SELECT
+SELECT distinct
 --   'y2' as  Sources_Source_Id ,
   case when Sources_Source_Id is null or Sources_Source_Id = ''  then 'y2' 
   else Sources_Source_Id END as Sources_Source_Id,
