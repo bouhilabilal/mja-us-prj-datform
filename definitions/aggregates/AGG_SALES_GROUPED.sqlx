@@ -5,41 +5,91 @@ config {
   tags: ["dimensions", "SALES", "cust_without_dudup"]
 }
 
-with sales as (
+
+-- with sales as (
+--   SELECT
+--     sales.Sales_Order_Id,
+--     sales.sources,
+--     sales.invoice_id,
+--     sales.source_customer_id,
+--     sales.store_code,
+--     sales.currency_id,
+--     sales.country_delivery_id,
+--     sales.order_date,
+--     sales.invoice_date,
+--     sales.export_date,
+--     sales.cashier,
+--     sales.order_status,
+--     sales.shipping_status,
+--     sales.financed_order,
+--     sales.Billing_Address,
+--     sales.Shipping_Address,
+--     sales.order_line,
+--     cust.Customer_Id as Customer_Id
+--   FROM
+--     ${ref("AGG_SALES")} sales
+--   LEFT JOIN (
+--     SELECT
+--       distinct Customer_Id,
+--       Source_Customer_Id
+--     FROM
+--       ${ref("WRK_CUSTOMER_METRICS_PREP")},
+--       UNNEST(Sources)
+--     WHERE
+--       Source_Customer_Id IS NOT NULL
+--       AND Source_Customer_Id != ''
+--   ) cust
+--   ON
+--     sales.source_customer_id = cust.Source_Customer_Id
+-- ),
+WITH RankedCustomers AS (
   SELECT
-    sales.Sales_Order_Id,
-    sales.sources,
-    sales.invoice_id,
-    sales.source_customer_id,
-    sales.store_code,
-    sales.currency_id,
-    sales.country_delivery_id,
-    sales.order_date,
-    sales.invoice_date,
-    sales.export_date,
-    sales.cashier,
-    sales.order_status,
-    sales.shipping_status,
-    sales.financed_order,
-    sales.Billing_Address,
-    sales.Shipping_Address,
-    sales.order_line,
-    cust.Customer_Id as Customer_Id
+    Customer_Id,
+    Source_Customer_Id,
+    Account_Creation_Date,
+    Last_Modified_Date,
+    Last_Interaction_Date,
+    ROW_NUMBER() OVER (
+      PARTITION BY Source_Customer_Id
+      ORDER BY 
+        Last_Modified_Date DESC,
+        Last_Interaction_Date DESC,
+        Account_Creation_Date DESC,
+        Customer_Id
+    ) as rn
   FROM
-    ${ref("AGG_SALES")} sales
-  LEFT JOIN (
-    SELECT
-      distinct Customer_Id,
-      Source_Customer_Id
-    FROM
-      ${ref("WRK_CUSTOMER_METRICS_PREP")},
-      UNNEST(Sources)
-    WHERE
-      Source_Customer_Id IS NOT NULL
-      AND Source_Customer_Id != ''
-  ) cust
-  ON
-    sales.source_customer_id = cust.Source_Customer_Id
+    ${ref("WRK_CUSTOMER_METRICS_PREP")},
+    UNNEST(Sources)
+  WHERE
+    Source_Customer_Id IS NOT NULL
+    AND Source_Customer_Id != ''
+)
+,sales as (
+SELECT
+  sales.Sales_Order_Id,
+  sales.sources,
+  sales.invoice_id,
+  sales.source_customer_id,
+  sales.store_code,
+  sales.currency_id,
+  sales.country_delivery_id,
+  sales.order_date,
+  sales.invoice_date,
+  sales.export_date,
+  sales.cashier,
+  sales.order_status,
+  sales.shipping_status,
+  sales.financed_order,
+  sales.Billing_Address,
+  sales.Shipping_Address,
+  sales.order_line,
+  cust.Customer_Id as Customer_Id
+FROM
+  ${ref("AGG_SALES")} sales
+  LEFT JOIN UNNEST(sources) src
+  LEFT JOIN RankedCustomers cust
+    ON sales.source_customer_id = cust.Source_Customer_Id
+    AND cust.rn = 1
 ),
 combined as (
   SELECT
