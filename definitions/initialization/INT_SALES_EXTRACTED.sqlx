@@ -220,7 +220,7 @@ GROUP BY
     order_line_ti_amount_markdown
 
 )
-SELECT
+SELECT  distinct
   Sales_Order_Id,
   -- 'sfcc' as Sources_Source_Id,
   Sources_Source_Id,
@@ -299,7 +299,7 @@ sales_sfcc_updated
 
 
 UNION ALL
-SELECT
+SELECT distinct
   Sales_Order_Id,
   -- 'y2' as Sources_Source_Id,
   Sources_Source_Id,
