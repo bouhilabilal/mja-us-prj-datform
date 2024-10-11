@@ -27,7 +27,23 @@ GROUP BY
   store_code,
   source_customer_id
 
-), sales as 
+-- ), sales as 
+),
+ranked_sales_lines as (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY Sources_Source_Id,Sources_Source_Sales_Order_Id, store_code, order_date, invoice_date,order_line_order_line_id,  order_line_product_id, 
+    case when upper(transaction_type) is null then upper(order_line_transaction_type) else upper(transaction_type) end ORDER BY export_date DESC) as rn
+  FROM
+    ${ref("INT_SALES")} ist
+),sales_lines as 
+(SELECT
+  * except (rn)
+FROM
+  ranked_sales_lines
+WHERE
+  rn = 1)
+, sales as 
 (SELECT
   cast( ABS(FARM_FINGERPRINT(CONCAT(IFNULL(ist.Sources_Source_Sales_Order_Id, ''), IFNULL(ist.store_code, ''),--IFNULL(ist.source_customer_id, ''),
   IFNULL(ist.invoice_date, '1999-01-01')))) as string) AS Sales_Order_Id,
@@ -111,8 +127,8 @@ GROUP BY
       ) AS order_line,
       
 FROM
-      ${ref("INT_SALES")} ist
-   
+      -- ${ref("INT_SALES")} ist
+      sales_lines ist   
    where order_line_product_id is not null
 GROUP BY
   Sources_Source_Sales_Order_Id,
