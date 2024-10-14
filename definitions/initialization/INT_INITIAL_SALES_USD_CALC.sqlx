@@ -12,7 +12,8 @@ WITH
   combined_ids AS (
   SELECT
     DISTINCT golden_id,
-    source_customer_id
+    source_customer_id,
+    ROW_NUMBER() OVER (PARTITION BY source_customer_id ORDER BY golden_id) AS rn
   FROM (
     SELECT
       golden_id,
@@ -82,7 +83,8 @@ WITH
   INNER JOIN
     combined_ids
   ON
-    combined_ids.source_customer_id = sales.source_customer_id),
+    combined_ids.source_customer_id = sales.source_customer_id
+    AND rn = 1),
   old_sales AS (
   SELECT
     distinct sales.Sales_Order_Id,
@@ -138,7 +140,8 @@ WITH
     combined_ids
   ON
     --combined_ids.source_customer_id = sales.customer_id ) changed 24 avril
-    combined_ids.source_customer_id = sales.source_customer_id )
+    combined_ids.source_customer_id = sales.source_customer_id 
+    AND rn = 1)
 
 SELECT
   COALESCE(A.Sales_Order_Id, B.Sales_Order_Id) AS Sales_Order_Id,
