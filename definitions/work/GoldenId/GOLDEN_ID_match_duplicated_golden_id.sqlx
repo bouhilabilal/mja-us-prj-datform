@@ -1,12 +1,11 @@
-
 config {
     type: "table",
     schema: "work",
     name: "WRK_CUSTOMER_GOLDEN_ID",
     tags: ["dimensions", "CUSTOMERS","GOLDEN_ID"],
     dependencies :["WRK_GOLDEN_ID_REF"]
-
 }
+
 js {
     const {
         recent,
@@ -14,8 +13,8 @@ js {
     } = require("includes/merging_functions/merge_on_time.js");
 }
 
-     -- part 6 GOLDEN_ID_match_duplicated_golden_id
-  with match_duplicated_golden_id AS (
+-- part 6 GOLDEN_ID_match_duplicated_golden_id
+with match_duplicated_golden_id AS (
   SELECT
     golden_id,
     pos_id,
@@ -25,143 +24,158 @@ js {
   GROUP BY
     golden_id,
     pos_id,
-    ecom_id ),
-  PrecomputedValues AS (
+    ecom_id
+),
+PrecomputedValues AS (
     SELECT
         r.golden_id,
         FIRST_VALUE(pos_created_by_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS pos_created_by_id,
-    FIRST_VALUE(ecom_created_by_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS ecom_created_by_id,
-    FIRST_VALUE(last_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_name,
-    FIRST_VALUE(middle_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS middle_name,
-    FIRST_VALUE(first_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_name,
-    FIRST_VALUE(email IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS email,
-    FIRST_VALUE(phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS phone,
-    FIRST_VALUE(Sources_Source_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Source_Id,
-    FIRST_VALUE(Sources_Source_Customer_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Source_Customer_Id,
-    FIRST_VALUE(Sources_Account_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Account_id,
-    FIRST_VALUE(Email_main_email IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Email_main_email,
-    FIRST_VALUE(Email_source_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Email_source_id,
-    FIRST_VALUE(phone_main_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS phone_main_phone,
-    FIRST_VALUE(Phone_source_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_source_id,
-    FIRST_VALUE(Phone_home_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_home_phone,
-    FIRST_VALUE(Phone_office_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_office_phone,
-    FIRST_VALUE(fictitious_customer IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fictitious_customer,
-    FIRST_VALUE(Prefered_Postal_Address_Address IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_Address,
-    FIRST_VALUE(Prefered_Postal_Address_ZipCode IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_ZipCode,
-    FIRST_VALUE(Prefered_Postal_Address_City IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_City,
-    FIRST_VALUE(Prefered_Postal_Address_State IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_State,
-    FIRST_VALUE(Prefered_Postal_Address_CountryId IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_CountryId,
-    FIRST_VALUE(Prefered_Postal_Address_CountryName IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_CountryName,
-    FIRST_VALUE(LANGUAGE IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LANGUAGE,
-    FIRST_VALUE(Nationality IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Nationality,
-    FIRST_VALUE(birthdate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS birthdate,
-    TIMESTAMP_DIFF(CURRENT_DATE(), FIRST_VALUE(birthdate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING), YEAR) AS Age,
-    FIRST_VALUE(Salutation IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Salutation,
-    FIRST_VALUE(Salutation_Gender IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Salutation_Gender,
-    FIRST_VALUE(Account_Creation_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Account_Creation_Date,
-    FIRST_VALUE(Last_Activity_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Activity_Date,
-    FIRST_VALUE(Last_Viewed_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Viewed_Date,
-    FIRST_VALUE(Last_Modified_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Modified_Date,
-    FIRST_VALUE(Customer_Type IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Customer_Type,
-    FIRST_VALUE(consent_homephone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_homephone_code,
-    FIRST_VALUE(consent_officephone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_officephone_code,
-    FIRST_VALUE(consent_cellphone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_cellphone_code,
-    FIRST_VALUE(consent_email1_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_email1_code,
-    FIRST_VALUE(consent_email2_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_email2_code,
-    -- ${recent("Contactability_Email", "golden_id", "last_update_date")} AS Contactability_Email,
-    -- ${recent("Contactability_Phone", "golden_id", "last_update_date")} AS Contactability_Phone,
-    -- ${recent("Contactability_Print", "golden_id", "last_update_date")} AS Contactability_Print,
-    FIRST_VALUE(Date_Of_Acceptance IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Date_Of_Acceptance,
-    FIRST_VALUE(Date_Of_Opt_In_Update IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Date_Of_Opt_In_Update,
-    FIRST_VALUE(Privacy_Policy_Signed IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Privacy_Policy_Signed,
-    FIRST_VALUE(Privacy_Policy_Acceptance IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Privacy_Policy_Acceptance,
-    FIRST_VALUE(Sales_Associate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sales_Associate,
-    FIRST_VALUE(Master_Record_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Master_Record_Id,
-    FIRST_VALUE(last_update_date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_update_date,
-    FIRST_VALUE(tech_golden_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS tech_golden_id,
+        FIRST_VALUE(ecom_created_by_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS ecom_created_by_id,
+        FIRST_VALUE(last_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_name,
+        FIRST_VALUE(middle_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS middle_name,
+        FIRST_VALUE(first_name IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_name,
+        FIRST_VALUE(email IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS email,
+        FIRST_VALUE(phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS phone,
+        FIRST_VALUE(Sources_Source_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Source_Id,
+        FIRST_VALUE(Sources_Source_Customer_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Source_Customer_Id,
+        FIRST_VALUE(Sources_Account_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sources_Account_id,
+        FIRST_VALUE(Email_main_email IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Email_main_email,
+        FIRST_VALUE(Email_source_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Email_source_id,
+        FIRST_VALUE(phone_main_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS phone_main_phone,
+        FIRST_VALUE(Phone_source_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_source_id,
+        FIRST_VALUE(Phone_home_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_home_phone,
+        FIRST_VALUE(Phone_office_phone IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Phone_office_phone,
+        FIRST_VALUE(fictitious_customer IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS fictitious_customer,
+        FIRST_VALUE(Prefered_Postal_Address_Address IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_Address,
+        FIRST_VALUE(Prefered_Postal_Address_ZipCode IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_ZipCode,
+        FIRST_VALUE(Prefered_Postal_Address_City IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_City,
+        FIRST_VALUE(Prefered_Postal_Address_State IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_State,
+        FIRST_VALUE(Prefered_Postal_Address_CountryId IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_CountryId,
+        FIRST_VALUE(Prefered_Postal_Address_CountryName IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Prefered_Postal_Address_CountryName,
+        FIRST_VALUE(LANGUAGE IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS LANGUAGE,
+        FIRST_VALUE(Nationality IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Nationality,
+        FIRST_VALUE(birthdate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS birthdate,
+        TIMESTAMP_DIFF(CURRENT_DATE(), FIRST_VALUE(birthdate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING), YEAR) AS Age,
+        FIRST_VALUE(Salutation IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Salutation,
+        FIRST_VALUE(Salutation_Gender IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Salutation_Gender,
+        FIRST_VALUE(Account_Creation_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Account_Creation_Date,
+        FIRST_VALUE(Last_Activity_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Activity_Date,
+        FIRST_VALUE(Last_Viewed_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Viewed_Date,
+        FIRST_VALUE(Last_Modified_Date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Last_Modified_Date,
+        FIRST_VALUE(Customer_Type IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Customer_Type,
+        FIRST_VALUE(consent_homephone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_homephone_code,
+        FIRST_VALUE(consent_officephone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_officephone_code,
+        FIRST_VALUE(consent_cellphone_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_cellphone_code,
+        FIRST_VALUE(consent_email1_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_email1_code,
+        FIRST_VALUE(consent_email2_code IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS consent_email2_code,
+        FIRST_VALUE(Date_Of_Acceptance IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Date_Of_Acceptance,
+        FIRST_VALUE(Date_Of_Opt_In_Update IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Date_Of_Opt_In_Update,
+        FIRST_VALUE(Privacy_Policy_Signed IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Privacy_Policy_Signed,
+        FIRST_VALUE(Privacy_Policy_Acceptance IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Privacy_Policy_Acceptance,
+        FIRST_VALUE(Sales_Associate IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Sales_Associate,
+        FIRST_VALUE(Master_Record_Id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS Master_Record_Id,
+        FIRST_VALUE(last_update_date IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_update_date,
+        FIRST_VALUE(tech_golden_id IGNORE NULLS) OVER(PARTITION BY golden_id ORDER BY last_update_date DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS tech_golden_id,
     FROM
         ${ref("GOLDEN_ID_golden_id_attributed")} r
+),
+UniqueGoldenID AS (
+    SELECT
+        COALESCE(pos_id, ecom_id) AS unique_id,
+        FIRST_VALUE(golden_id) OVER (
+            PARTITION BY COALESCE(pos_id, ecom_id)
+            ORDER BY 
+                CASE 
+                    WHEN pos_id IS NOT NULL AND ecom_id IS NOT NULL THEN 1
+                    WHEN pos_id IS NOT NULL THEN 2
+                    WHEN ecom_id IS NOT NULL THEN 3
+                    ELSE 4
+                END,
+                golden_id
+        ) AS unique_golden_id
+    FROM match_duplicated_golden_id
+    WHERE pos_id IS NOT NULL OR ecom_id IS NOT NULL
 ),
 FinalOutput AS (
     SELECT
         CASE
-            WHEN tech_golden_id <> CAST(m.golden_id AS STRING) AND tech_golden_id IS NOT NULL THEN tech_golden_id 
+            WHEN u.unique_golden_id IS NOT NULL THEN CAST(u.unique_golden_id AS STRING)
+            WHEN p.tech_golden_id <> CAST(m.golden_id AS STRING) AND p.tech_golden_id IS NOT NULL THEN p.tech_golden_id 
             ELSE CAST(m.golden_id AS STRING)
         END AS golden_id,
-        pos_id,
-        ecom_id,
+        m.pos_id,
+        m.ecom_id,
         p.pos_created_by_id,
         p.ecom_created_by_id,
         p.last_name,
         p.middle_name,
         p.first_name,
-    p.email,
-    p.phone,
-    p.Sources_Source_Id,
-    p.Sources_Source_Customer_Id,
-    p.Sources_Account_id,
-    p.Email_main_email,
-    p.Email_source_id,
-    p.phone_main_phone,
-    p.Phone_source_id,
-    p.Phone_home_phone,
-    p.Phone_office_phone,
-    p.fictitious_customer,
-    p.Prefered_Postal_Address_Address,
-    p.Prefered_Postal_Address_ZipCode,
-    p.Prefered_Postal_Address_City,
-    p.Prefered_Postal_Address_State,
-    p.Prefered_Postal_Address_CountryId,
-    p.Prefered_Postal_Address_CountryName,
-    p.LANGUAGE,
-    p.Nationality,
-    p.birthdate,
-    p.Age,
-    p.Salutation,
-    p.Salutation_Gender,
-    p.Account_Creation_Date,
-    p.Last_Activity_Date,
-    p.Last_Viewed_Date,
-    p.Last_Modified_Date,
-    p.Customer_Type,
-    p.consent_homephone_code,
-    p.consent_officephone_code,
-    p.consent_cellphone_code,
-    p.consent_email1_code,
-    p.consent_email2_code,
-    -- p.Contactability_Email,
-    -- p.Contactability_Phone,
-    -- p.Contactability_Print,
-    p.Date_Of_Acceptance,
-    p.Date_Of_Opt_In_Update,
-    p.Privacy_Policy_Signed,
-    p.Privacy_Policy_Acceptance,
-    p.Sales_Associate,
-    p.Master_Record_Id,
-    p.last_update_date,
-    p.tech_golden_id
+        p.email,
+        p.phone,
+        p.Sources_Source_Id,
+        p.Sources_Source_Customer_Id,
+        p.Sources_Account_id,
+        p.Email_main_email,
+        p.Email_source_id,
+        p.phone_main_phone,
+        p.Phone_source_id,
+        p.Phone_home_phone,
+        p.Phone_office_phone,
+        p.fictitious_customer,
+        p.Prefered_Postal_Address_Address,
+        p.Prefered_Postal_Address_ZipCode,
+        p.Prefered_Postal_Address_City,
+        p.Prefered_Postal_Address_State,
+        p.Prefered_Postal_Address_CountryId,
+        p.Prefered_Postal_Address_CountryName,
+        p.LANGUAGE,
+        p.Nationality,
+        p.birthdate,
+        p.Age,
+        p.Salutation,
+        p.Salutation_Gender,
+        p.Account_Creation_Date,
+        p.Last_Activity_Date,
+        p.Last_Viewed_Date,
+        p.Last_Modified_Date,
+        p.Customer_Type,
+        p.consent_homephone_code,
+        p.consent_officephone_code,
+        p.consent_cellphone_code,
+        p.consent_email1_code,
+        p.consent_email2_code,
+        p.Date_Of_Acceptance,
+        p.Date_Of_Opt_In_Update,
+        p.Privacy_Policy_Signed,
+        p.Privacy_Policy_Acceptance,
+        p.Sales_Associate,
+        p.Master_Record_Id,
+        p.last_update_date,
+        p.tech_golden_id
     FROM
         match_duplicated_golden_id m
     JOIN
         PrecomputedValues p ON m.golden_id = p.golden_id
-)
-,cutomers as (SELECT *
-FROM FinalOutput
-QUALIFY ROW_NUMBER() OVER(PARTITION BY golden_id, ecom_id, pos_id ORDER BY golden_id) = 1)
-
-
-,  cutmap AS (
-  SELECT
-    customer_id,
-    -- fingerprint
-  FROM dimensions.DI_CUSTOMERS_MAPPING
+    LEFT JOIN
+        UniqueGoldenID u ON COALESCE(m.pos_id, m.ecom_id) = u.unique_id
+),
+customers AS (
+    SELECT *
+    FROM FinalOutput
+    QUALIFY ROW_NUMBER() OVER(PARTITION BY golden_id, ecom_id, pos_id ORDER BY golden_id) = 1
+),
+cutmap AS (
+    SELECT
+        customer_id,
+        -- fingerprint
+    FROM dimensions.DI_CUSTOMERS_MAPPING
 )
 SELECT
-  cust.*,
-    case when consent_email1_code = 'PAR' or consent_email1_code = 'ENS' or consent_email2_code = 'PAR' or consent_email2_code = 'ENS' then TRUE
-  else false end as   Contactability_Email,
-  case when consent_cellphone_code = 'PAR' or consent_cellphone_code = 'ENS' or consent_homephone_code = 'PAR' or consent_homephone_code = 'ENS'  then TRUE
-  else false end as   Contactability_Phone,
-  false as   Contactability_Print,
-  -- ,cutmap.fingerprint
-FROM cutomers cust
+    cust.*,
+    CASE WHEN consent_email1_code = 'PAR' OR consent_email1_code = 'ENS' OR consent_email2_code = 'PAR' OR consent_email2_code = 'ENS' THEN TRUE
+    ELSE FALSE END AS Contactability_Email,
+    CASE WHEN consent_cellphone_code = 'PAR' OR consent_cellphone_code = 'ENS' OR consent_homephone_code = 'PAR' OR consent_homephone_code = 'ENS' THEN TRUE
+    ELSE FALSE END AS Contactability_Phone,
+    FALSE AS Contactability_Print,
+    -- cutmap.fingerprint
+FROM customers cust
